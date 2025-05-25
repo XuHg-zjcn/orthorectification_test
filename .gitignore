@@ -1,4 +1,4 @@
-# Copyright (C) 2022-2024 Xu Ruijun
+# Copyright (C) 2022-2025 Xu Ruijun
 #
 # Copying and distribution of this gitignore file, with or without modification,
 # are permitted in any medium without royalty provided the copyright
@@ -22,3 +22,5 @@ __pycache__/
 
 # data
 *.rpc
+*.jpg
+*.tif
