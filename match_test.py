@@ -17,22 +17,73 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #############################################################################
 import sys
+import math
 import cv2
+from osgeo import gdal
 import numpy as np
 from optparse import OptionParser
 
 
-# 变化投影矩阵
-def H_zoom(H, zoom):
-    H2 = H.copy()
-    H2[2,0:2] /= zoom
-    H2[0:2,2] *= zoom
+# 经测试能读取SPOT1-5卫星影像的四角坐标
+def read_metadata(path):
+    img = gdal.Open(path)
+    gcps = img.GetGCPs()
+    img.Close()
+    if len(gcps) >= 4:
+        gcps = np.array(list(map(lambda x:(x.GCPPixel, x.GCPLine, x.GCPX, x.GCPY), gcps)))
+        H, mask = cv2.findHomography(gcps[:,:2], gcps[:,2:])  # 数据坐标到地理坐标的投影矩阵
+        return gcps, H
+    return None
+
+# 透视矩阵在图像裁剪，缩放下的变换
+def H_transpose(H, x0_s=0, y0_s=0, x0_d=0, y0_d=0, zoom_s=1, zoom_d=1):
+    Td = np.array([[zoom_d, 0,      x0_d],
+                   [0,      zoom_d, y0_d],
+                   [0,      0,      1   ]])
+
+    Ts = np.array([[zoom_s, 0,      x0_s],
+                   [0,      zoom_s, y0_s],
+                   [0,      0,      1   ]])
+    H2 = np.matmul(Td, np.matmul(H, np.linalg.inv(Ts)))
+    H2 /= H2[-1, -1]
     return H2
 
+# 计算图像B透视投影到图像A中与图像A的交集在图像A的坐标系下的包围框
+def perspective_boundingbox(H, widthA, heightA, widthB, heightB):
+    conrerB = np.array([[0, 0, 1],
+                        [0, heightB, 1],
+                        [widthB, heightB, 1],
+                        [widthB, 0, 1]])
+    conrerB_at_coordA = np.matmul(H, conrerB.transpose())
+    conrerB_at_coordA /= conrerB_at_coordA[-1]
+    xmin_a = 0
+    xMax_a = widthA
+    ymin_a = 0
+    yMax_a = heightA
+    xmin_b = np.min(conrerB_at_coordA[0])
+    xMax_b = np.max(conrerB_at_coordA[0])
+    ymin_b = np.min(conrerB_at_coordA[1])
+    yMax_b = np.max(conrerB_at_coordA[1])
+    xmin = max(xmin_a, xmin_b)
+    xMax = min(xMax_a, xMax_b)
+    ymin = max(ymin_a, ymin_b)
+    yMax = min(yMax_a, yMax_b)
+    return int(xmin), int(ymin), int(xMax), int(yMax)
+
+# 以合适的整数倍缩小图像
+def auto_zoom(img, maxpixel=1e6):
+    if img.shape[0]*img.shape[1] > maxpixel:
+        n = math.ceil(math.sqrt(img.shape[0]*img.shape[1]/maxpixel))
+        img_ = cv2.resize(img, None, None, 1.0/n, 1.0/n, cv2.INTER_AREA)
+    else:
+        n = 1
+        img_ = img
+    return img_, n
+
 # 对比两张图片的对应点
-def compare(img1, img2, outpath_match=None):
+def compare(img1, img2, outpath_match=None, maxpoints=2000):
     # 部分代码由deepseek给出
-    sift = cv2.SIFT_create(20000)
+    sift = cv2.SIFT_create(maxpoints)
     keypoints1, descriptors1 = sift.detectAndCompute(img1, None)
     print(f'found {len(keypoints1)} keypoints in img1')
     keypoints2, descriptors2 = sift.detectAndCompute(img2, None)
@@ -46,7 +97,7 @@ def compare(img1, img2, outpath_match=None):
         match_points2.append(keypoints2[match.trainIdx].pt)
     match_points1 = np.array(match_points1, dtype=np.float32)
     match_points2 = np.array(match_points2, dtype=np.float32)
-    H, mask = cv2.findHomography(match_points2, match_points1, method=cv2.RANSAC, maxIters=2000, confidence=0.99)
+    H, mask = cv2.findHomography(match_points2, match_points1, method=cv2.RANSAC, maxIters=10000, confidence=0.99)
     good_matches = [match for match, flag in zip(matches, mask) if flag]
     print(f'matched {len(good_matches)} keypoints')
 
@@ -70,13 +121,47 @@ if __name__ == '__main__':
     parser.add_option('-b', '--img2', dest='img2', help='second input image path')
     parser.add_option('-m', '--imgmatch', dest='imgmatch', help='output draw match image path')
     parser.add_option('-3', '--img3d', dest='img3d', help='output red-cyan 3D image path')
+    # TODO: 添加更多命令行参数
     options, args = parser.parse_args()
+    # TODO: 使用GDAL读取遥感影像
     img1 = cv2.imread(options.img1, cv2.IMREAD_GRAYSCALE)
     img2 = cv2.imread(options.img2, cv2.IMREAD_GRAYSCALE)
-    img1_ = cv2.resize(img1, None, None, 1.0/4, 1.0/4, cv2.INTER_AREA)
-    img2_ = cv2.resize(img2, None, None, 1.0/4, 1.0/4, cv2.INTER_AREA)
-    H_4 = compare(img1_, img2_, options.imgmatch)
-    H = H_zoom(H_4, 4)
-    print(H)
+
+    paraA = read_metadata(options.img1)
+    paraB = read_metadata(options.img2)
+    hasMetadata = False
+    if paraA is not None and paraB is not None:
+        hasMetadata = True
+        Hx = np.matmul(np.linalg.inv(paraA[1]), paraB[1])
+        print('estimated perspective matrix by metadata:\n', Hx)  # 估计原图的透视矩阵
+        bbox_at_coordA = perspective_boundingbox(
+            Hx,
+            img1.shape[1], img1.shape[0],
+            img2.shape[1], img2.shape[0])
+        print(bbox_at_coordA)
+        bbox_at_coordB = perspective_boundingbox(
+            np.linalg.inv(Hx),
+            img2.shape[1], img2.shape[0],
+            img1.shape[1], img1.shape[0])
+        print(bbox_at_coordB)
+
+        img1 = img1[bbox_at_coordA[1]:bbox_at_coordA[3],
+                    bbox_at_coordA[0]:bbox_at_coordA[2]]
+        img2 = img2[bbox_at_coordB[1]:bbox_at_coordB[3],
+                    bbox_at_coordB[0]:bbox_at_coordB[2]]
+
+    img1_, n1 = auto_zoom(img1, maxpixel=1e6)
+    img2_, n2 = auto_zoom(img2, maxpixel=1e6)
+    H_ = compare(img1_, img2_, options.imgmatch, maxpoints=2000)  # 已切割和缩小图像对的(B->A)透视矩阵
+    H_cut = H_transpose(H_, zoom_d=n1, zoom_s=n2)                 # 已切割图像对的(B->A)透视矩阵
+    if hasMetadata and bbox_at_coordA is not None and bbox_at_coordB is not None:
+        H_orig = H_transpose(                                     # 原图像对的(B->A)透视矩阵
+            H_,
+            x0_d=bbox_at_coordA[0], y0_d=bbox_at_coordA[1], zoom_d=n1,
+            x0_s=bbox_at_coordB[0], y0_s=bbox_at_coordB[1], zoom_s=n2)
+        print('mearused perspective matrix:\n', H_orig)
+    else:
+        print('mearused perspective matrix:\n', H_cut)
+
     if options.img3d is not None:
-        create_rb3dview(img1[:32766, :32766], img2[:32766,:32766], H, options.img3d) #32766是由于SHRT_MAX限制
+        create_rb3dview(img1[:32766, :32766], img2[:32766,:32766], H_cut, options.img3d) #32766是由于SHRT_MAX限制

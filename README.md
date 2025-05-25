@@ -13,9 +13,14 @@ USGS EarthExplorer下载下来的解密影像没有坐标信息，更没有正�
 这篇文章不是当时记录下来的，隔了几个星期突然想到还有一些代码没有上传，还要写点文档介绍一下，所以是按照回忆写下  
 
 
+## 图像对齐
 `match_test.py`是一个SIFT+RANSAC算法的立体图像对齐程序。
 我用`./match_test.py -a D3C1208-200141A020_h.tif -b D3C1208-200141F020_c.tif -m match_x.jpg -3 match3d.jpg`进行测试，除了山区附近的有误差，用3D眼镜查看效果很好，能看到建筑物和树木的凸起。
+
+也能匹配一些SPOT4和SPOT5影像，时间间隔1年左右的两幅影像能匹配，时间间隔太长就不行。
+
 - `D3C1208-200141A020_h.tif`和`D3C1208-200141F020_c.tif`分别是从[USGS EarthExplorer](https://earthexplorer.usgs.gov/)上下载`D3C1208-200141A020.tgz`和`D3C1208-200141F020.tgz`压缩包解压后得到
+- SPOT影像是从[CNES Spot World Heritage](https://regards.cnes.fr/user/swh/modules/60)下载的
 
 ## 版权和许可证
 Copyright (C) 2024 Xu Ruijun  
