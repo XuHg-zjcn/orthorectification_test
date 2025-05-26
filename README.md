@@ -14,12 +14,17 @@ USGS EarthExplorer下载下来的解密影像没有坐标信息，更没有正�
 
 
 ## 图像对齐
-`match_test.py`是一个SIFT+RANSAC算法的立体图像对齐程序。
-我用`./match_test.py -a D3C1208-200141A020_h.tif -b D3C1208-200141F020_c.tif -m match_x.jpg -3 match3d.jpg`进行测试，除了山区附近的有误差，用3D眼镜查看效果很好，能看到建筑物和树木的凸起。
+`match_test.py`是一个SIFT+RANSAC算法的立体图像对齐程序，支持使用缩放、拉普拉斯变换、膨胀进行预处理。
+### 测试实例
+- `./match_test.py -a D3C1208-200141A020_h.tif -b D3C1208-200141F020_c.tif -m match_x.jpg -3 match3d.jpg --maxpixel_sift 1e7`能匹配2289个点，除了山区附近的有误差，用3D眼镜查看效果很好，能看到建筑物和树木的凸起。
+- `./match_test.py -a D3C1208-200141A020_h.tif -b D3C1215-401419A011_e.tif -m match_1974_1979.jpg --laplace --dilsize 8 --maxpixel_sift 1e6 --threshold_m1m2_ratio 0.9`能匹配224点
 
-也能匹配一些SPOT4和SPOT5影像，时间间隔1年左右的两幅影像能匹配，时间间隔太长就不行。
+也能匹配一些SPOT4和SPOT5影像，时间间隔超过约1年的影像需要使用拉普拉斯变换和膨胀预处理才能成功匹配
+- `./match_test.py -a 003-008_S5_295-290-0_2011-11-24-02-41-14_HRG-2_A_DT_JK/SCENE01/IMAGERY.TIF -b 003-004_S5_295-290-0_2012-01-04-02-52-09_HRG-2_A_DT_NO/SCENE01/IMAGERY.TIF -m match_spot_2011_2012.jpg`能匹配770个点
+- `./match_test.py -a 003-008_S5_295-290-0_2011-11-24-02-41-14_HRG-2_A_DT_JK/SCENE01/IMAGERY.TIF -b 004-010_S5_295-290-0_2014-02-01-02-25-09_HRG-2_B_DT_NO/SCENE01/IMAGERY.TIF -m match_spot_2011_2014.jpg --laplace --dilsize 8 --maxpixel_sift=1e6 --threshold_m1m2_ratio 0.87`能匹配30个点
 
-- `D3C1208-200141A020_h.tif`和`D3C1208-200141F020_c.tif`分别是从[USGS EarthExplorer](https://earthexplorer.usgs.gov/)上下载`D3C1208-200141A020.tgz`和`D3C1208-200141F020.tgz`压缩包解压后得到
+### 数据来源
+- `D3C1208-200141A020_h.tif`和`D3C1208-200141F020_c.tif`等影像是从[USGS EarthExplorer](https://earthexplorer.usgs.gov/)上下载Declass影像压缩包解压后得到
 - SPOT影像是从[CNES Spot World Heritage](https://regards.cnes.fr/user/swh/modules/60)下载的
 
 ## 版权和许可证

@@ -80,25 +80,38 @@ def auto_zoom(img, maxpixel=1e6):
         img_ = img
     return img_, n
 
+def preprocess(img, nz):
+    kern = cv2.getStructuringElement(cv2.MORPH_ELLIPSE if nz >= 5 else cv2.MORPH_RECT, (nz, nz))
+    img = cv2.Laplacian(img, cv2.CV_8U)
+    img = cv2.dilate(img, kern)
+    img = cv2.resize(img, None, None, 1.0/nz, 1.0/nz, cv2.INTER_AREA)
+    return img
+
 # 对比两张图片的对应点
-def compare(img1, img2, outpath_match=None, maxpoints=2000):
+def compare(img1, img2, outpath_match=None, maxpoints=2000, threshold_m1m2_ratio=0.8):
     # 部分代码由deepseek给出
     sift = cv2.SIFT_create(maxpoints)
+    print(f'img1.shape = {img1.shape}')
     keypoints1, descriptors1 = sift.detectAndCompute(img1, None)
     print(f'found {len(keypoints1)} keypoints in img1')
+    print(f'img2.shape = {img1.shape}')
     keypoints2, descriptors2 = sift.detectAndCompute(img2, None)
     print(f'found {len(keypoints2)} keypoints in img2')
     flann = cv2.FlannBasedMatcher()
-    matches = flann.match(descriptors1, descriptors2)
+    matches = flann.knnMatch(descriptors1, descriptors2, k=2)
+    matches_filterd = []
     match_points1 = []
     match_points2 = []
-    for match in matches:
-        match_points1.append(keypoints1[match.queryIdx].pt)
-        match_points2.append(keypoints2[match.trainIdx].pt)
+    for match1, match2 in matches:
+        if match1.distance > threshold_m1m2_ratio*match2.distance:
+            continue
+        match_points1.append(keypoints1[match1.queryIdx].pt)
+        match_points2.append(keypoints2[match1.trainIdx].pt)
+        matches_filterd.append(match1)
     match_points1 = np.array(match_points1, dtype=np.float32)
     match_points2 = np.array(match_points2, dtype=np.float32)
     H, mask = cv2.findHomography(match_points2, match_points1, method=cv2.RANSAC, maxIters=10000, confidence=0.99)
-    good_matches = [match for match, flag in zip(matches, mask) if flag]
+    good_matches = [match for match, flag in zip(matches_filterd, mask) if flag]
     print(f'matched {len(good_matches)} keypoints')
 
     if outpath_match is not None:
@@ -121,11 +134,15 @@ if __name__ == '__main__':
     parser.add_option('-b', '--img2', dest='img2', help='second input image path')
     parser.add_option('-m', '--imgmatch', dest='imgmatch', help='output draw match image path')
     parser.add_option('-3', '--img3d', dest='img3d', help='output red-cyan 3D image path')
+    parser.add_option('--laplace', dest='laplace', default=False, action='store_true', help='enable laplace preprocess')
+    parser.add_option('--dilsize', dest='dilsize', default=8, help='kern size of dilate and downsample before sift')
+    parser.add_option('--maxpix_sift', '--maxpixel_sift', dest='maxpixel_sift', default=1e7, help='maxpixel for sift')
+    parser.add_option('--threshold_m1m2_ratio', dest='threshold_m1m2_ratio', default=0.8, help='threshold for match filter: SIFT vector distance ratio of first and second match')
     # TODO: 添加更多命令行参数
     options, args = parser.parse_args()
     # TODO: 使用GDAL读取遥感影像
-    img1 = cv2.imread(options.img1, cv2.IMREAD_GRAYSCALE)
-    img2 = cv2.imread(options.img2, cv2.IMREAD_GRAYSCALE)
+    img1 = cv2.imread(options.img1, cv2.IMREAD_GRAYSCALE)#[1400:-2000]  # TODO: 自动检测胶片边缘
+    img2 = cv2.imread(options.img2, cv2.IMREAD_GRAYSCALE)#[1400:-2000]
 
     paraA = read_metadata(options.img1)
     paraB = read_metadata(options.img2)
@@ -150,9 +167,26 @@ if __name__ == '__main__':
         img2 = img2[bbox_at_coordB[1]:bbox_at_coordB[3],
                     bbox_at_coordB[0]:bbox_at_coordB[2]]
 
-    img1_, n1 = auto_zoom(img1, maxpixel=1e6)
-    img2_, n2 = auto_zoom(img2, maxpixel=1e6)
-    H_ = compare(img1_, img2_, options.imgmatch, maxpoints=2000)  # 已切割和缩小图像对的(B->A)透视矩阵
+    maxpixel_sift = int(float(options.maxpixel_sift))
+    if options.laplace:
+        dilsize = int(options.dilsize)
+        maxpix1 = maxpixel_sift*dilsize**2
+    else:
+        maxpix1 = maxpixel_sift
+    img1_, n1 = auto_zoom(img1, maxpixel=maxpix1)
+    img2_, n2 = auto_zoom(img2, maxpixel=maxpix1)
+    print(f'downsamp for input img1 in {n1}, img2 in {n2}')
+    if options.laplace:
+        img1_ = preprocess(img1_, dilsize)
+        img2_ = preprocess(img2_, dilsize)
+        n1 *= dilsize
+        n2 *= dilsize
+        print(f'Laplacian, dilate and downsamp in {dilsize}')
+    threshold_m1m2_ratio = float(options.threshold_m1m2_ratio)
+    H_ = compare(img1_, img2_,                                    # 已切割和缩小图像对的(B->A)透视矩阵
+                 options.imgmatch,
+                 maxpoints=10000,
+                 threshold_m1m2_ratio=threshold_m1m2_ratio)
     H_cut = H_transpose(H_, zoom_d=n1, zoom_s=n2)                 # 已切割图像对的(B->A)透视矩阵
     if hasMetadata and bbox_at_coordA is not None and bbox_at_coordB is not None:
         H_orig = H_transpose(                                     # 原图像对的(B->A)透视矩阵
