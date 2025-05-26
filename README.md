@@ -14,10 +14,10 @@ USGS EarthExplorer下载下来的解密影像没有坐标信息，更没有正�
 
 
 ## 图像对齐
-`match_test.py`是一个SIFT+RANSAC算法的立体图像对齐程序，支持使用缩放、拉普拉斯变换、膨胀进行预处理。
+`match_test.py`是一个SIFT+RANSAC算法的立体图像对齐程序，支持使用裁剪黑边、降低分辨率、拉普拉斯变换、膨胀进行预处理。
 ### 测试实例
-- `./match_test.py -a D3C1208-200141A020_h.tif -b D3C1208-200141F020_c.tif -m match_x.jpg -3 match3d.jpg --maxpixel_sift 1e7`能匹配2289个点，除了山区附近的有误差，用3D眼镜查看效果很好，能看到建筑物和树木的凸起。
-- `./match_test.py -a D3C1208-200141A020_h.tif -b D3C1215-401419A011_e.tif -m match_1974_1979.jpg --laplace --dilsize 8 --maxpixel_sift 1e6 --threshold_m1m2_ratio 0.9`能匹配224点
+- `./match_test.py -a D3C1208-200141A020_h.tif -b D3C1208-200141F020_c.tif -m match_x.jpg -3 match3d.jpg --maxpixel_sift 1e7  --cutblack_topbottom`能匹配2382个点，除了山区附近的有误差，用3D眼镜查看效果很好，能看到建筑物和树木的凸起。
+- `./match_test.py -a D3C1208-200141A020_h.tif -b D3C1215-401419A011_e.tif -m match_1974_1979.jpg --laplace --dilsize 8 --maxpixel_sift 1e6 --threshold_m1m2_ratio 0.9 --cutblack_topbottom`能匹配260点
 
 也能匹配一些SPOT4和SPOT5影像，时间间隔超过约1年的影像需要使用拉普拉斯变换和膨胀预处理才能成功匹配
 - `./match_test.py -a 003-008_S5_295-290-0_2011-11-24-02-41-14_HRG-2_A_DT_JK/SCENE01/IMAGERY.TIF -b 003-004_S5_295-290-0_2012-01-04-02-52-09_HRG-2_A_DT_NO/SCENE01/IMAGERY.TIF -m match_spot_2011_2012.jpg`能匹配770个点

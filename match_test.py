@@ -70,6 +70,30 @@ def perspective_boundingbox(H, widthA, heightA, widthB, heightB):
     yMax = min(yMax_a, yMax_b)
     return int(xmin), int(ymin), int(xMax), int(yMax)
 
+# axis=0 for top and bottom for axis=1 for left and right
+def detect_edge_black(img, axis, alpha=1.0/3):
+    def scan(index_above, min_count, inc):
+        begin = index_above[0]
+        i = 0
+        count = 0
+        while i+1 < len(index_above) and count < min_count:
+            if index_above[i+1] == index_above[i]+inc:
+                count += 1
+            else:
+                count = 1
+                begin = index_above[i+1]
+            i += 1
+        return begin
+    axis_other = [i for i in range(img.ndim)]
+    axis_other.remove(axis)
+    line_mean = np.mean(img, axis=tuple(axis_other))
+    threshold = np.median(line_mean)*alpha
+    index_above = np.where(line_mean > threshold)[0]
+    min_count = line_mean.shape[0]//4
+    a = scan(index_above, min_count, 1)
+    b = scan(index_above[::-1], min_count, -1)
+    return a, b
+
 # 以合适的整数倍缩小图像
 def auto_zoom(img, maxpixel=1e6):
     if img.shape[0]*img.shape[1] > maxpixel:
@@ -80,12 +104,43 @@ def auto_zoom(img, maxpixel=1e6):
         img_ = img
     return img_, n
 
-def preprocess(img, nz):
+def laplacian_and_dilate(img, nz):
     kern = cv2.getStructuringElement(cv2.MORPH_ELLIPSE if nz >= 5 else cv2.MORPH_RECT, (nz, nz))
     img = cv2.Laplacian(img, cv2.CV_8U)
     img = cv2.dilate(img, kern)
     img = cv2.resize(img, None, None, 1.0/nz, 1.0/nz, cv2.INTER_AREA)
     return img
+
+def preprocess(img, name='', maxpixel_out=None,
+               laplace=False, dilsize=8,
+               cutblack_topbottom=False, cutblack_leftright=False):
+    ndown = 1
+    x0 = 0
+    y0 = 0
+    shapein = img.shape
+    if cutblack_topbottom:
+        t, b = detect_edge_black(img, axis=0)
+        img = img[t:b+1]
+        y0 += t
+        percent = (shapein[0]-(b-t+1))/shapein[0]
+        print(f'{name} cropoff black edge top-bottom in x:[{t},{b+1}), drop {percent:.2%}')
+    if cutblack_leftright:
+        l, r = detect_edge_black(img, axis=1)
+        img = img[:, l:r+1]
+        x0 += l
+        percent = (shapein[1]-(r-l+1))/shapein[1]
+        print(f'{name} cropoff black edge left-right in y:[{l},{r+1}), drop {percent:.2%}')
+    if maxpixel_out is not None:
+        if laplace:
+            maxpix1 = maxpixel_out*dilsize**2
+        else:
+            maxpix1 = maxpixel_out
+        img, n = auto_zoom(img, maxpix1)
+        ndown *= n
+    if laplace:
+        img = laplacian_and_dilate(img, dilsize)
+        ndown *= dilsize
+    return img, ndown, (x0, y0)
 
 # 对比两张图片的对应点
 def compare(img1, img2, outpath_match=None, maxpoints=2000, threshold_m1m2_ratio=0.8):
@@ -138,15 +193,23 @@ if __name__ == '__main__':
     parser.add_option('--dilsize', dest='dilsize', default=8, help='kern size of dilate and downsample before sift')
     parser.add_option('--maxpix_sift', '--maxpixel_sift', dest='maxpixel_sift', default=1e7, help='maxpixel for sift')
     parser.add_option('--threshold_m1m2_ratio', dest='threshold_m1m2_ratio', default=0.8, help='threshold for match filter: SIFT vector distance ratio of first and second match')
+    parser.add_option('--cutblack_topbottom', dest='cutblack_topbottom', action='store_true', default=False, help='cut black edge on top and bottom of image')
+    parser.add_option('--cutblack_leftright', dest='cutblack_leftright', action='store_true', default=False, help='cut black edge on left and right of image')
     # TODO: 添加更多命令行参数
     options, args = parser.parse_args()
     # TODO: 使用GDAL读取遥感影像
-    img1 = cv2.imread(options.img1, cv2.IMREAD_GRAYSCALE)#[1400:-2000]  # TODO: 自动检测胶片边缘
-    img2 = cv2.imread(options.img2, cv2.IMREAD_GRAYSCALE)#[1400:-2000]
+    img1 = cv2.imread(options.img1, cv2.IMREAD_GRAYSCALE)
+    img2 = cv2.imread(options.img2, cv2.IMREAD_GRAYSCALE)
 
     paraA = read_metadata(options.img1)
     paraB = read_metadata(options.img2)
     hasMetadata = False
+    x0a = 0
+    y0a = 0
+    x0b = 0
+    y0b = 0
+    na = 1
+    nb = 1
     if paraA is not None and paraB is not None:
         hasMetadata = True
         Hx = np.matmul(np.linalg.inv(paraA[1]), paraB[1])
@@ -166,36 +229,39 @@ if __name__ == '__main__':
                     bbox_at_coordA[0]:bbox_at_coordA[2]]
         img2 = img2[bbox_at_coordB[1]:bbox_at_coordB[3],
                     bbox_at_coordB[0]:bbox_at_coordB[2]]
+        x0a += bbox_at_coordA[0]
+        y0a += bbox_at_coordA[1]
+        x0b += bbox_at_coordB[0]
+        y0b += bbox_at_coordB[1]
 
     maxpixel_sift = int(float(options.maxpixel_sift))
-    if options.laplace:
-        dilsize = int(options.dilsize)
-        maxpix1 = maxpixel_sift*dilsize**2
-    else:
-        maxpix1 = maxpixel_sift
-    img1_, n1 = auto_zoom(img1, maxpixel=maxpix1)
-    img2_, n2 = auto_zoom(img2, maxpixel=maxpix1)
-    print(f'downsamp for input img1 in {n1}, img2 in {n2}')
-    if options.laplace:
-        img1_ = preprocess(img1_, dilsize)
-        img2_ = preprocess(img2_, dilsize)
-        n1 *= dilsize
-        n2 *= dilsize
-        print(f'Laplacian, dilate and downsamp in {dilsize}')
+    laplace = options.laplace
+    dilsize = int(options.dilsize)
+    cutblack_topbottom = options.cutblack_topbottom
+    cutblack_leftright = options.cutblack_leftright
+    img1_, n1, xy1 = preprocess(img1, 'img1', maxpixel_out=maxpixel_sift,
+                                laplace=laplace, dilsize=dilsize,
+                                cutblack_topbottom=cutblack_topbottom, cutblack_leftright=cutblack_leftright)
+    img2_, n2, xy2 = preprocess(img2, 'img2', maxpixel_out=maxpixel_sift,
+                               laplace=laplace, dilsize=dilsize,
+                               cutblack_topbottom=cutblack_topbottom, cutblack_leftright=cutblack_leftright)
+    na *= n1
+    nb *= n2
+    x0a += xy1[0]
+    y0a += xy1[1]
+    x0b += xy2[0]
+    y0b += xy2[1]
+
     threshold_m1m2_ratio = float(options.threshold_m1m2_ratio)
     H_ = compare(img1_, img2_,                                    # 已切割和缩小图像对的(B->A)透视矩阵
                  options.imgmatch,
                  maxpoints=10000,
                  threshold_m1m2_ratio=threshold_m1m2_ratio)
-    H_cut = H_transpose(H_, zoom_d=n1, zoom_s=n2)                 # 已切割图像对的(B->A)透视矩阵
-    if hasMetadata and bbox_at_coordA is not None and bbox_at_coordB is not None:
-        H_orig = H_transpose(                                     # 原图像对的(B->A)透视矩阵
-            H_,
-            x0_d=bbox_at_coordA[0], y0_d=bbox_at_coordA[1], zoom_d=n1,
-            x0_s=bbox_at_coordB[0], y0_s=bbox_at_coordB[1], zoom_s=n2)
-        print('mearused perspective matrix:\n', H_orig)
-    else:
-        print('mearused perspective matrix:\n', H_cut)
+    H_orig = H_transpose(                                         # 原图像对的(B->A)透视矩阵
+        H_,
+        x0_d=x0a, y0_d=y0a, zoom_d=n1,
+        x0_s=x0b, y0_s=y0b, zoom_s=n2)
+    print('mearused perspective matrix:\n', H_orig)
 
     if options.img3d is not None:
-        create_rb3dview(img1[:32766, :32766], img2[:32766,:32766], H_cut, options.img3d) #32766是由于SHRT_MAX限制
+        create_rb3dview(img1[:32766, :32766], img2[:32766,:32766], H_orig, options.img3d) #32766是由于SHRT_MAX限制
