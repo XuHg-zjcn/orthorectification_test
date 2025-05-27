@@ -27,6 +27,12 @@ USGS EarthExplorer下载下来的解密影像没有坐标信息，更没有正�
 - `D3C1208-200141A020_h.tif`和`D3C1208-200141F020_c.tif`等影像是从[USGS EarthExplorer](https://earthexplorer.usgs.gov/)上下载Declass影像压缩包解压后得到
 - SPOT影像是从[CNES Spot World Heritage](https://regards.cnes.fr/user/swh/modules/60)下载的
 
+## 参考资料
+- 知乎：[python遥感影像配准以及生成配准后影像的RPC系数文件(附源码与打包好的软件)](https://zhuanlan.zhihu.com/p/24076276139)
+- 知乎：[【转载】机器视觉：SIFT Matching with RANSAC](https://zhuanlan.zhihu.com/p/588670464)
+- [Automated Processing of Declassified KH-9 Hexagon Satellite Images for Global Elevation Change Analysis Since the 1970s](https://www.frontiersin.org/journals/earth-science/articles/10.3389/feart.2020.566802/full)
+- 上一篇文章提到了NASA的[Ames Stereo Pipeline](https://github.com/NeoGeographyToolkit/StereoPipeline)软件，我看了文档有[关于处理KH-9影像的内容](https://stereopipeline.readthedocs.io/en/latest/examples/historical.html#declassified-satellite-images-kh-9)，我还没有尝试过此款软件
+
 ## 版权和许可证
 Copyright (C) 2024 Xu Ruijun  
 代码使用GNU通用公共许可证第三版或更新授权  
