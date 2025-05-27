@@ -24,3 +24,5 @@ __pycache__/
 *.rpc
 *.jpg
 *.tif
+*.txt
+*.TXT
