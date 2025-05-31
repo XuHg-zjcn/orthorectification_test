@@ -21,6 +21,7 @@ __pycache__/
 .#*
 
 # data
+/data
 *.rpc
 *.jpg
 *.tif
