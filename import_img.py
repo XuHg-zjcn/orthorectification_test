@@ -26,7 +26,7 @@ pattern_kh = r'^D\d?[A-Z]{0,2}\d{4}-\d+[A-Z]\d+'
 pattern_spot = r'\d{3}-\d{3}_S\d_\d{3}-\d{3}-\d_\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2}_\w+-\d_\w_\w{2}_\w{2}'
 
 
-def process_kh_fid(path, rpath, name):
+def process_kh_fid(db, path, rpath, name):
     print('is KH-series imagery', name)
     fid = db.get_frame_by_name(name)
     if fid is not None:
@@ -55,28 +55,32 @@ def process_kh_fid(path, rpath, name):
 def process_spot_fid(path, rpath, name):
     pass
 
+def import_img(db, path):
+    rpath = os.path.realpath(path)
+    filename = os.path.basename(rpath)
+    fid = None
+    m = re.match(pattern_kh, filename)
+    if m is not None:
+        name = m.group(0)
+        fid = process_kh_fid(db, path, rpath, name)
+    if re.match(pattern_spot, rpath):
+        fid = process_spot_fid(path, rpath, name)
+    if fid is None:
+        exit()
+    size = os.stat(rpath).st_size
+    iid = db.get_img(rpath, size)
+    if iid is None:
+        iid = db.insert_img(fid, [rpath], size)
+        print(f'image insert to db, id={iid}')
+    else:
+        print(f'image already in db, id={iid}')
+    print()
+    return fid, iid
+
 if __name__ == '__main__':
     db = database.Database('data/imagery.db')
     paths = sys.argv[1:]
     for path in paths:
-        rpath = os.path.realpath(path)
-        filename = os.path.basename(rpath)
-        fid = None
-        m = re.match(pattern_kh, filename)
-        if m is not None:
-            name = m.group(0)
-            fid = process_kh_fid(path, rpath, name)
-        if re.match(pattern_spot, rpath):
-            fid = process_spot_fid(path, rpath, name)
-        if fid is None:
-            exit()
-        size = os.stat(rpath).st_size
-        iid = db.get_img(rpath, size)
-        if iid is None:
-            iid = db.insert_img(fid, [rpath], size)
-            print(f'image insert to db, id={iid}')
-        else:
-            print(f'image already in db, id={iid}')
-        print()
+        import_img(db, path)
     db.commit()
     db.close()

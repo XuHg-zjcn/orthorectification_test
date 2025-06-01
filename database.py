@@ -57,6 +57,7 @@ class Database:
             'a_imgid INT,'
             'b_imgid INT,'
             'transfrom BLOB,'  # 投影矩阵，9个double值
+            'area_b_in_a POLYGON,'
             'isChecked BOOL,'  # 是否经过人工检查
             'FOREIGN KEY (a_imgid) REFERENCES images(id),'
             'FOREIGN KEY (b_imgid) REFERENCES images(id),'
@@ -114,6 +115,13 @@ class Database:
             path_lst =  paths.split('\n')
             if any(map(lambda x:filename==os.path.basename(x), path_lst)):
                 return idx
+
+    def insert_match(self, iid1, iid2, transform, area_b_in_a):
+        cursor = self.conn.cursor()
+        cursor.execute(
+            'INSERT INTO matchs (a_imgid, b_imgid, transfrom, area_b_in_a) VALUES(?,?,?,ST_GeomFromText(?,0));',
+            (iid1, iid2, transform, area_b_in_a)
+        )
 
     def commit(self):
         self.conn.commit()

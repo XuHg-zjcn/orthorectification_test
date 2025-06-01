@@ -22,8 +22,12 @@ from optparse import OptionParser
 from preprocess_single import preprocess
 from metadata import read_metadata
 from imgmatch import H_transpose, compare, create_rb3dview
+import database
+import import_img
+import shapely
 
 
+# TODO: a,b 和 1,2 两种记号代表图片在代码中混用，需要进行统一
 if __name__ == '__main__':
     parser = OptionParser()
     parser.add_option('-a', '--img1', dest='img1', help='first input image path')
@@ -36,6 +40,7 @@ if __name__ == '__main__':
     parser.add_option('--threshold_m1m2_ratio', dest='threshold_m1m2_ratio', default=0.8, help='threshold for match filter: SIFT vector distance ratio of first and second match')
     parser.add_option('--cutblack_topbottom', dest='cutblack_topbottom', action='store_true', default=False, help='cut black edge on top and bottom of image')
     parser.add_option('--cutblack_leftright', dest='cutblack_leftright', action='store_true', default=False, help='cut black edge on left and right of image')
+    parser.add_option('--addto_db', dest='addto_db', action='store_true', default=False, help='add record to database')
     # TODO: 添加更多命令行参数
     options, args = parser.parse_args()
     # TODO: 使用GDAL读取遥感影像
@@ -103,6 +108,33 @@ if __name__ == '__main__':
         x0_d=x0a, y0_d=y0a, zoom_d=n1,
         x0_s=x0b, y0_s=y0b, zoom_s=n2)
     print('mearused perspective matrix:\n', H_orig)
+    # TODO: 更进一步，对重叠区域进行SIFT匹配，使用高分辨率的图像分块处理，进行更高精度的对齐
+
+    def proj(x):
+        ones = np.ones((x.shape[0], 1))
+        x = np.concatenate((x, ones), axis=1)
+        x = np.matmul(x, H_orig.transpose())  #(A . x^T)^T = x . A^T
+        x /= x[:,2].reshape((-1,1))
+        return x[:,:2]
+
+    x_a = x0a + img1_.shape[1]*na
+    y_a = y0a + img1_.shape[0]*na
+    x_b = x0b + img2_.shape[1]*nb
+    y_b = y0b + img2_.shape[0]*nb
+    rect_a = shapely.polygons([(x0a, y0a), (x_a, y0a), (x_a, y_a), (x0a, y_a)])
+    rect_b = shapely.polygons([(x0b, y0b), (x_b, y0b), (x_b, y_b), (x0b, y_b)])
+    b_in_a = shapely.transform(rect_b, proj)
+
+    if options.addto_db:
+        db = database.Database('data/imagery.db')
+        assert H_orig.shape == (3,3)
+        H_blob = H_orig.astype(np.float64).tobytes()
+        fid1, iid1 = import_img.import_img(db, options.img1)
+        fid2, iid2 = import_img.import_img(db, options.img2)
+        # TODO: 检查数据库里是否已存在，避免UNIQUE约束错误
+        db.insert_match(iid1, iid2, H_blob, b_in_a.wkt)
+        db.commit()
+        db.close()
 
     if options.img3d is not None:
         create_rb3dview(img1[:32766, :32766], img2[:32766,:32766], H_orig, options.img3d) #32766是由于SHRT_MAX限制
