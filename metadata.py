@@ -1,5 +1,6 @@
 from osgeo import gdal
 import cv2
+import numpy as np
 
 
 # 经测试能读取SPOT1-5卫星影像的四角坐标

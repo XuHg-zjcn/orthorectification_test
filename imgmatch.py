@@ -43,7 +43,7 @@ def compare(img1, img2, outpath_match=None, maxpoints=2000, threshold_m1m2_ratio
     print(f'img1.shape = {img1.shape}')
     keypoints1, descriptors1 = sift.detectAndCompute(img1, None)
     print(f'found {len(keypoints1)} keypoints in img1')
-    print(f'img2.shape = {img1.shape}')
+    print(f'img2.shape = {img2.shape}')
     keypoints2, descriptors2 = sift.detectAndCompute(img2, None)
     print(f'found {len(keypoints2)} keypoints in img2')
     flann = cv2.FlannBasedMatcher()

@@ -20,7 +20,7 @@ import sys
 import getopt
 import cv2
 import numpy as np
-from preprocess_single import preprocess
+from preprocess_single import preprocess, perspective_boundingbox
 from metadata import read_metadata
 from imgmatch import H_transpose, compare, create_rb3dview
 import database
