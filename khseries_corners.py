@@ -18,18 +18,10 @@
 #############################################################################
 import sys
 from osgeo import gdal
+from datetime import datetime
+import shapely
 
-def read_corner(filename):
-    s = {'Center Latitude dec',
-        'Center Longitude dec',
-        'NW Corner Lat dec',
-        'NW Corner Long dec',
-        'NE Corner Lat dec',
-        'NE Corner Long dec',
-        'SE Corner Lat dec',
-        'SE Corner Long dec',
-        'SW Corner Lat dec',
-        'SW Corner Long dec'}
+def read_metadata(filename):
     d = {}
     with open(filename, 'r') as f:
         while True:
@@ -42,15 +34,47 @@ def read_corner(filename):
                 continue
             name, value = spt
             name = name.rstrip(' ')
-            if name in s:
-                d[name] = float(value)
+            # 尝试以整数形式解析
+            try:
+                value_i = int(value)
+            except Exception as e:
+                pass
+            else:
+                d[name] = value_i
+                continue
+            # 尝试以浮点数形式解析
+            try:
+                value_f = float(value)
+            except Exception as e:
+                pass
+            else:
+                d[name] = value_f
+                continue
+            # 尝试以日期形式解析
+            try:
+                value_d = datetime.strptime(value, '%Y/%m/%d')
+            except Exception as e:
+                pass
+            else:
+                d[name] = value_d
+                continue
+            # 直接以字符串储存
+            d[name] = value
     return d
+
+def get_shapely_polygon(d):
+    name_lst = [('NW Corner Lat dec', 'NW Corner Long dec'),
+                ('NE Corner Lat dec', 'NE Corner Long dec'),
+                ('SE Corner Lat dec', 'SE Corner Long dec'),
+                ('SW Corner Lat dec', 'SW Corner Long dec')]
+    points = list(map(lambda x:(d[x[1]],d[x[0]]), name_lst))
+    return shapely.polygons(points)
 
 if __name__ == '__main__':
     preview_path = sys.argv[1]
     metadata_path = sys.argv[2]
     out_path = sys.argv[3]
-    conrner = read_corner(metadata_path)
+    conrner = read_metadata(metadata_path)
     preview = gdal.Open(preview_path)
     width = preview.RasterXSize
     height = preview.RasterYSize
