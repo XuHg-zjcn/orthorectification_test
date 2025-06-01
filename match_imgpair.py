@@ -16,9 +16,10 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #############################################################################
+import sys
+import getopt
 import cv2
 import numpy as np
-from optparse import OptionParser
 from preprocess_single import preprocess
 from metadata import read_metadata
 from imgmatch import H_transpose, compare, create_rb3dview
@@ -27,28 +28,88 @@ import import_img
 import shapely
 
 
+def parser_options():
+    def mycast(T, valstr):
+        if not isinstance(T, type):
+            raise TypeError('T is not a type')
+        if T == bool:
+            return True
+        elif T == int:
+            return int(valstr)
+        elif T == float:
+            return float(valstr)
+        else:
+            return str(valstr)
+
+    short_options = 'a:b:m:3:'
+    long_options = [
+        'imgA=',
+        'imgB=',
+        'laplace',
+        'dilsize=',
+        'maxpix_sift=',
+        'maxpixel_sift=',
+        'threshold_m1m2_ratio=',
+        'cutblack_topbottom',
+        'cutblack_leftright',
+        'addto_db',
+    ]
+    short_to_long = {
+        'a':'imgA',
+        'b':'imgB',
+        '3':'img3D',
+        'm':'imgMatch',
+        'maxpix_sift':'maxpixel_sift'
+    }
+    opts = {
+        'imgA':None,
+        'imgB':None,
+        'img3D':None,
+        'imgMatch':None,
+        'threshold_m1m2_ratio':0.8,
+        'addto_db':False,
+    }
+    img_para_default = {
+        'laplace':False,
+        'dilsize':8,
+        'maxpixel_sift':1e7,
+        'cutblack_topbottom':False,
+        'cutblack_leftright':False}
+    curr_img_para = None
+    optlist, args = getopt.getopt(sys.argv[1:], short_options, long_options)
+    for opt, valstr in optlist:
+        optname = opt.lstrip('-')
+        if optname in short_to_long:
+            optname = short_to_long[optname]
+        if optname == 'imgA' or optname == 'imgB':
+            curr_img_para =  img_para_default.copy()
+            curr_img_para['path'] = str(valstr)
+            opts[optname] = curr_img_para
+        elif optname in img_para_default:
+            value = mycast(type(img_para_default[optname]), valstr)
+            if curr_img_para is None:
+                img_para_default[optname] = value
+            else:
+                curr_img_para[optname] = value
+        elif optname in opts:
+            value = mycast(type(opts[optname]), valstr)
+            opts[optname] = value
+        else:
+            raise ValueError(f'unknown opt {optname}')
+    return opts
+
+
 # TODO: a,b 和 1,2 两种记号代表图片在代码中混用，需要进行统一
 if __name__ == '__main__':
-    parser = OptionParser()
-    parser.add_option('-a', '--img1', dest='img1', help='first input image path')
-    parser.add_option('-b', '--img2', dest='img2', help='second input image path')
-    parser.add_option('-m', '--imgmatch', dest='imgmatch', help='output draw match image path')
-    parser.add_option('-3', '--img3d', dest='img3d', help='output red-cyan 3D image path')
-    parser.add_option('--laplace', dest='laplace', default=False, action='store_true', help='enable laplace preprocess')
-    parser.add_option('--dilsize', dest='dilsize', default=8, help='kern size of dilate and downsample before sift')
-    parser.add_option('--maxpix_sift', '--maxpixel_sift', dest='maxpixel_sift', default=1e7, help='maxpixel for sift')
-    parser.add_option('--threshold_m1m2_ratio', dest='threshold_m1m2_ratio', default=0.8, help='threshold for match filter: SIFT vector distance ratio of first and second match')
-    parser.add_option('--cutblack_topbottom', dest='cutblack_topbottom', action='store_true', default=False, help='cut black edge on top and bottom of image')
-    parser.add_option('--cutblack_leftright', dest='cutblack_leftright', action='store_true', default=False, help='cut black edge on left and right of image')
-    parser.add_option('--addto_db', dest='addto_db', action='store_true', default=False, help='add record to database')
-    # TODO: 添加更多命令行参数
-    options, args = parser.parse_args()
+    opts = parser_options()
     # TODO: 使用GDAL读取遥感影像
-    img1 = cv2.imread(options.img1, cv2.IMREAD_GRAYSCALE)
-    img2 = cv2.imread(options.img2, cv2.IMREAD_GRAYSCALE)
+    opt_a = opts['imgA']
+    opt_b = opts['imgB']
+    img1 = cv2.imread(opt_a['path'], cv2.IMREAD_GRAYSCALE)
+    img2 = cv2.imread(opt_b['path'], cv2.IMREAD_GRAYSCALE)
 
-    paraA = read_metadata(options.img1)
-    paraB = read_metadata(options.img2)
+    paraA = read_metadata(opt_a['path'])
+    paraB = read_metadata(opt_b['path'])
     hasMetadata = False
     x0a = 0
     y0a = 0
@@ -80,17 +141,18 @@ if __name__ == '__main__':
         x0b += bbox_at_coordB[0]
         y0b += bbox_at_coordB[1]
 
-    maxpixel_sift = int(float(options.maxpixel_sift))
-    laplace = options.laplace
-    dilsize = int(options.dilsize)
-    cutblack_topbottom = options.cutblack_topbottom
-    cutblack_leftright = options.cutblack_leftright
-    img1_, n1, xy1 = preprocess(img1, 'img1', maxpixel_out=maxpixel_sift,
-                                laplace=laplace, dilsize=dilsize,
-                                cutblack_topbottom=cutblack_topbottom, cutblack_leftright=cutblack_leftright)
-    img2_, n2, xy2 = preprocess(img2, 'img2', maxpixel_out=maxpixel_sift,
-                               laplace=laplace, dilsize=dilsize,
-                               cutblack_topbottom=cutblack_topbottom, cutblack_leftright=cutblack_leftright)
+    img1_, n1, xy1 = preprocess(img1, 'img1',
+                                maxpixel_out=opt_a['maxpixel_sift'],
+                                laplace=opt_a['laplace'],
+                                dilsize=opt_a['dilsize'],
+                                cutblack_topbottom=opt_a['cutblack_topbottom'],
+                                cutblack_leftright=opt_a['cutblack_leftright'])
+    img2_, n2, xy2 = preprocess(img2, 'img2',
+                                maxpixel_out=opt_b['maxpixel_sift'],
+                                laplace=opt_b['laplace'],
+                                dilsize=opt_b['dilsize'],
+                                cutblack_topbottom=opt_b['cutblack_topbottom'],
+                                cutblack_leftright=opt_b['cutblack_leftright'])
     na *= n1
     nb *= n2
     x0a += xy1[0]
@@ -98,9 +160,9 @@ if __name__ == '__main__':
     x0b += xy2[0]
     y0b += xy2[1]
 
-    threshold_m1m2_ratio = float(options.threshold_m1m2_ratio)
+    threshold_m1m2_ratio = opts['threshold_m1m2_ratio']
     H_ = compare(img1_, img2_,                                    # 已切割和缩小图像对的(B->A)透视矩阵
-                 options.imgmatch,
+                 opts['imgMatch'],
                  maxpoints=10000,
                  threshold_m1m2_ratio=threshold_m1m2_ratio)
     H_orig = H_transpose(                                         # 原图像对的(B->A)透视矩阵
@@ -125,16 +187,16 @@ if __name__ == '__main__':
     rect_b = shapely.polygons([(x0b, y0b), (x_b, y0b), (x_b, y_b), (x0b, y_b)])
     b_in_a = shapely.transform(rect_b, proj)
 
-    if options.addto_db:
+    if opts['addto_db']:
         db = database.Database('data/imagery.db')
         assert H_orig.shape == (3,3)
         H_blob = H_orig.astype(np.float64).tobytes()
-        fid1, iid1 = import_img.import_img(db, options.img1)
-        fid2, iid2 = import_img.import_img(db, options.img2)
+        fid1, iid1 = import_img.import_img(db, opt_a['path'])
+        fid2, iid2 = import_img.import_img(db, opt_b['path'])
         # TODO: 检查数据库里是否已存在，避免UNIQUE约束错误
         db.insert_match(iid1, iid2, H_blob, b_in_a.wkt)
         db.commit()
         db.close()
 
-    if options.img3d is not None:
-        create_rb3dview(img1[:32766, :32766], img2[:32766,:32766], H_orig, options.img3d) #32766是由于SHRT_MAX限制
+    if opts['img3D'] is not None:
+        create_rb3dview(img1[:32766, :32766], img2[:32766,:32766], H_orig, opts['img3D']) #32766是由于SHRT_MAX限制

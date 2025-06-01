@@ -14,14 +14,15 @@ USGS EarthExplorer下载下来的解密影像没有坐标信息，更没有正�
 
 
 ## 图像对齐
-`match_test.py`是一个SIFT+RANSAC算法的立体图像对齐程序，支持使用裁剪黑边、降低分辨率、拉普拉斯变换、膨胀进行预处理。
+`match_imgpair.py`是一个SIFT+RANSAC算法的立体图像对齐程序，支持使用裁剪黑边、降低分辨率、拉普拉斯变换、膨胀进行预处理。
+一些命令行选项可重复多次出现，与位置相关，决定每个图像的处理方式，如`--laplace`,`--dilsize`,`--maxpixel_sift`,`--cutblack_topbottom`,`--cutblack_leftright`（如果出现在指定任何图像之前(`-a`,`-b`选项之前)，将会代替该选项的默认值，如果这些选项出现在指定图像文件后，只会更改该图像文件的选项。
 ### 测试实例
-- `./match_test.py -a D3C1208-200141A020_h.tif -b D3C1208-200141F020_c.tif -m match_x.jpg -3 match3d.jpg --maxpixel_sift 1e7  --cutblack_topbottom`能匹配2382个点，除了山区附近的有误差，用3D眼镜查看效果很好，能看到建筑物和树木的凸起。
-- `./match_test.py -a D3C1208-200141A020_h.tif -b D3C1215-401419A011_e.tif -m match_1974_1979.jpg --laplace --dilsize 8 --maxpixel_sift 1e6 --threshold_m1m2_ratio 0.9 --cutblack_topbottom`能匹配260点
+- `./match_imgpair.py  --maxpixel_sift 1e7 --cutblack_topbottom -a data/D3C1208-200141A020_h.tif -b data/D3C1208-200141F020_c.tif -m data/match_x.jpg -3 match3d.jpg`能匹配2382个点，除了山区附近的有误差，用3D眼镜查看效果很好，能看到建筑物和树木的凸起。
+- `./match_imgpair.py --laplace --dilsize 8 --maxpixel_sift 1e6 --threshold_m1m2_ratio 0.9 --cutblack_topbottom -a data/D3C1208-200141A020_h.tif -b data/D3C1215-401419A011_e.tif -m data/match_1974_1979.jpg`能匹配260点
 
 也能匹配一些SPOT4和SPOT5影像，时间间隔超过约1年的影像需要使用拉普拉斯变换和膨胀预处理才能成功匹配
-- `./match_test.py -a 003-008_S5_295-290-0_2011-11-24-02-41-14_HRG-2_A_DT_JK/SCENE01/IMAGERY.TIF -b 003-004_S5_295-290-0_2012-01-04-02-52-09_HRG-2_A_DT_NO/SCENE01/IMAGERY.TIF -m match_spot_2011_2012.jpg`能匹配770个点
-- `./match_test.py -a 003-008_S5_295-290-0_2011-11-24-02-41-14_HRG-2_A_DT_JK/SCENE01/IMAGERY.TIF -b 004-010_S5_295-290-0_2014-02-01-02-25-09_HRG-2_B_DT_NO/SCENE01/IMAGERY.TIF -m match_spot_2011_2014.jpg --laplace --dilsize 8 --maxpixel_sift=1e6 --threshold_m1m2_ratio 0.87`能匹配30个点
+- `./match_imgpair.py -a data/003-008_S5_295-290-0_2011-11-24-02-41-14_HRG-2_A_DT_JK/SCENE01/IMAGERY.TIF -b data/003-004_S5_295-290-0_2012-01-04-02-52-09_HRG-2_A_DT_NO/SCENE01/IMAGERY.TIF -m data/match_spot_2011_2012.jpg`能匹配770个点
+- `./match_imgpair.py  --laplace --dilsize 8 --maxpixel_sift=1e6 --threshold_m1m2_ratio 0.87 -a data/003-008_S5_295-290-0_2011-11-24-02-41-14_HRG-2_A_DT_JK/SCENE01/IMAGERY.TIF -b data/004-010_S5_295-290-0_2014-02-01-02-25-09_HRG-2_B_DT_NO/SCENE01/IMAGERY.TIF -m data/match_spot_2011_2014.jpg`能匹配30个点
 
 ### 数据来源
 - `D3C1208-200141A020_h.tif`和`D3C1208-200141F020_c.tif`等影像是从[USGS EarthExplorer](https://earthexplorer.usgs.gov/)上下载Declass影像压缩包解压后得到
