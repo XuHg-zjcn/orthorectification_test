@@ -18,14 +18,16 @@
 #############################################################################
 import sys
 import getopt
+import functools
 import cv2
 import numpy as np
+import shapely
 from preprocess_single import preprocess, perspective_boundingbox
 from metadata import read_metadata
 from imgmatch import H_transpose, compare, create_rb3dview
 import database
 import import_img
-import shapely
+from common import shaply_proj
 
 
 def parser_options():
@@ -177,14 +179,7 @@ if __name__ == '__main__':
         x0_d=x0a, y0_d=y0a, zoom_d=n1,
         x0_s=x0b, y0_s=y0b, zoom_s=n2)
     print('mearused perspective matrix:\n', H_orig)
-    # TODO: 更进一步，对重叠区域进行SIFT匹配，使用高分辨率的图像分块处理，进行更高精度的对齐
-
-    def proj(x):
-        ones = np.ones((x.shape[0], 1))
-        x = np.concatenate((x, ones), axis=1)
-        x = np.matmul(x, H_orig.transpose())  #(A . x^T)^T = x . A^T
-        x /= x[:,2].reshape((-1,1))
-        return x[:,:2]
+    # TODO: 更进一步，使用高分辨率的图像分块处理，进行更高精度的对齐
 
     x_a = x0a + img1_.shape[1]*na
     y_a = y0a + img1_.shape[0]*na
@@ -192,7 +187,7 @@ if __name__ == '__main__':
     y_b = y0b + img2_.shape[0]*nb
     rect_a = shapely.polygons([(x0a, y0a), (x_a, y0a), (x_a, y_a), (x0a, y_a)])
     rect_b = shapely.polygons([(x0b, y0b), (x_b, y0b), (x_b, y_b), (x0b, y_b)])
-    b_in_a = shapely.transform(rect_b, proj)
+    b_in_a = shapely.transform(rect_b, functools.partial(shaply_proj, H_orig))
 
     if opts['addto_db']:
         db = database.Database('data/imagery.db')
