@@ -45,10 +45,12 @@ def parser_options():
     long_options = [
         'imgA=',
         'imgB=',
+        'predown=',
         'laplace',
         'dilsize=',
         'maxpix_sift=',
         'maxpixel_sift=',
+        'maxpoint_sift=',
         'threshold_m1m2_ratio=',
         'cutblack_topbottom',
         'cutblack_leftright',
@@ -70,9 +72,11 @@ def parser_options():
         'addto_db':False,
     }
     img_para_default = {
+        'predown':0,
         'laplace':False,
         'dilsize':8,
         'maxpixel_sift':1e7,
+        'maxpoint_sift':10000,
         'cutblack_topbottom':False,
         'cutblack_leftright':False}
     curr_img_para = None
@@ -143,12 +147,14 @@ if __name__ == '__main__':
 
     img1_, n1, xy1 = preprocess(img1, 'img1',
                                 maxpixel_out=opt_a['maxpixel_sift'],
+                                predown=opt_a['predown'],
                                 laplace=opt_a['laplace'],
                                 dilsize=opt_a['dilsize'],
                                 cutblack_topbottom=opt_a['cutblack_topbottom'],
                                 cutblack_leftright=opt_a['cutblack_leftright'])
     img2_, n2, xy2 = preprocess(img2, 'img2',
                                 maxpixel_out=opt_b['maxpixel_sift'],
+                                predown=opt_b['predown'],
                                 laplace=opt_b['laplace'],
                                 dilsize=opt_b['dilsize'],
                                 cutblack_topbottom=opt_b['cutblack_topbottom'],
@@ -163,7 +169,8 @@ if __name__ == '__main__':
     threshold_m1m2_ratio = opts['threshold_m1m2_ratio']
     H_ = compare(img1_, img2_,                                    # 已切割和缩小图像对的(B->A)透视矩阵
                  opts['imgMatch'],
-                 maxpoints=10000,
+                 maxpoints1=opt_a['maxpoint_sift'],
+                 maxpoints2=opt_b['maxpoint_sift'],
                  threshold_m1m2_ratio=threshold_m1m2_ratio)
     H_orig = H_transpose(                                         # 原图像对的(B->A)透视矩阵
         H_,

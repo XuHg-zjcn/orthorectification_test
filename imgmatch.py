@@ -37,15 +37,23 @@ def H_transpose(H, x0_s=0, y0_s=0, x0_d=0, y0_d=0, zoom_s=1, zoom_d=1):
     return H2
 
 # 对比两张图片的对应点
-def compare(img1, img2, outpath_match=None, maxpoints=2000, threshold_m1m2_ratio=0.8):
+def compare(img1, img2,
+            outpath_match=None,
+            maxpoints1=2000, maxpoints2=2000,
+            threshold_m1m2_ratio=0.8):
     # 部分代码由deepseek给出
-    sift = cv2.SIFT_create(maxpoints)
+    sift = cv2.SIFT_create()
+
     print(f'img1.shape = {img1.shape}')
+    sift.setNFeatures(maxpoints1)
     keypoints1, descriptors1 = sift.detectAndCompute(img1, None)
     print(f'found {len(keypoints1)} keypoints in img1')
+
     print(f'img2.shape = {img2.shape}')
+    sift.setNFeatures(maxpoints2)
     keypoints2, descriptors2 = sift.detectAndCompute(img2, None)
     print(f'found {len(keypoints2)} keypoints in img2')
+
     flann = cv2.FlannBasedMatcher()
     matches = flann.knnMatch(descriptors1, descriptors2, k=2)
     matches_filterd = []

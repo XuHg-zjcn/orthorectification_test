@@ -68,14 +68,16 @@ def detect_edge_black(img, axis, alpha=1.0/3):
     return a, b
 
 # 以合适的整数倍缩小图像
-def auto_zoom(img, maxpixel=1e6):
-    if img.shape[0]*img.shape[1] > maxpixel:
-        n = math.ceil(math.sqrt(img.shape[0]*img.shape[1]/maxpixel))
-        img_ = cv2.resize(img, None, None, 1.0/n, 1.0/n, cv2.INTER_AREA)
+def auto_zoom(img, maxpixel=1e6, predown=None):
+    if predown is not None and predown != 0:
+        n = predown
+    elif img.shape[0]*img.shape[1] <= maxpixel:
+        return img, 1
     else:
-        n = 1
-        img_ = img
-    return img_, n
+        n = math.ceil(math.sqrt(img.shape[0]*img.shape[1]/maxpixel))
+    if n != 1:
+        img_ = cv2.resize(img, None, None, 1.0/n, 1.0/n, cv2.INTER_AREA)
+        return img_, n
 
 def laplacian_and_dilate(img, nz):
     kern = cv2.getStructuringElement(cv2.MORPH_ELLIPSE if nz >= 5 else cv2.MORPH_RECT, (nz, nz))
@@ -84,7 +86,8 @@ def laplacian_and_dilate(img, nz):
     img = cv2.resize(img, None, None, 1.0/nz, 1.0/nz, cv2.INTER_AREA)
     return img
 
-def preprocess(img, name='', maxpixel_out=None,
+def preprocess(img, name='',
+               maxpixel_out=None, predown=None,
                laplace=False, dilsize=8,
                cutblack_topbottom=False, cutblack_leftright=False):
     ndown = 1
@@ -108,7 +111,7 @@ def preprocess(img, name='', maxpixel_out=None,
             maxpix1 = maxpixel_out*dilsize**2
         else:
             maxpix1 = maxpixel_out
-        img, n = auto_zoom(img, maxpix1)
+        img, n = auto_zoom(img, maxpix1, predown)
         ndown *= n
     if laplace:
         img = laplacian_and_dilate(img, dilsize)
