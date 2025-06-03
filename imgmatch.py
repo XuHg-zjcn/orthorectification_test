@@ -111,7 +111,7 @@ def compare(img1, img2,
     if outpath_match is not None:
         img3 = cv2.drawMatches(img1, kps1_filted, img2, kps2_filted, good2, None, matchColor=(0, 255, 0), singlePointColor=(0, 0, 255))
         cv2.imwrite(outpath_match, img3)
-    return H2
+    return H2, good2
 
 # 创建红蓝3D图片
 def create_rb3dview(img1, img2, H, outpath):

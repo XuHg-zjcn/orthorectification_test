@@ -123,6 +123,21 @@ class Database:
             (iid1, iid2, transform, area_b_in_a)
         )
 
+    def update_match(self, iid1, iid2, transform, area_b_in_a):
+        cursor = self.conn.cursor()
+        cursor.execute(
+            'UPDATE matchs SET transfrom=?, area_b_in_a=ST_GeomFromText(?,0) WHERE a_imgid=? AND b_imgid=?;',
+            (transform, area_b_in_a, iid1, iid2)
+        )
+
+    def get_match(self, iid1, iid2):
+        cursor = self.conn.cursor()
+        cursor.execute(
+            "SELECT transfrom, ST_AsText(area_b_in_a) FROM matchs WHERE a_imgid=? AND b_imgid=?;",
+            (iid1, iid2))
+        for i in cursor:
+            return i
+
     def commit(self):
         self.conn.commit()
 

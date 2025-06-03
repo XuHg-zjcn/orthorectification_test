@@ -57,6 +57,8 @@ def parser_options():
         'cutblack_topbottom',
         'cutblack_leftright',
         'addto_db',
+        'update_db',
+        'minmatch='
     ]
     short_to_long = {
         'a':'imgA',
@@ -71,7 +73,9 @@ def parser_options():
         'img3D':None,
         'imgMatch':None,
         'threshold_m1m2_ratio':0.8,
-        'addto_db':False,
+        'addto_db':True,
+        'update_db':False,
+        'minmatch':15,
     }
     img_para_default = {
         'predown':0,
@@ -108,9 +112,23 @@ def parser_options():
 # TODO: a,b 和 1,2 两种记号代表图片在代码中混用，需要进行统一
 if __name__ == '__main__':
     opts = parser_options()
-    # TODO: 使用GDAL读取遥感影像
     opt_a = opts['imgA']
     opt_b = opts['imgB']
+    db = database.Database('data/imagery.db')
+    fid1, iid1 = import_img.import_img(db, opt_a['path'])
+    fid2, iid2 = import_img.import_img(db, opt_b['path'])
+    result_in_db = db.get_match(iid1, iid2)
+    if result_in_db is not None:
+        print('found in database')
+        transform_blob, area_b_in_a_wkt = result_in_db
+        area_b_in_a = shapely.from_wkt(area_b_in_a_wkt)
+        H = np.frombuffer(transform_blob, dtype=np.float64).reshape((3, 3))
+        print(H)
+        print(area_b_in_a.wkt)
+        if not opts['update_db']:
+            exit()
+
+    # TODO: 使用GDAL读取遥感影像
     img1 = cv2.imread(opt_a['path'], cv2.IMREAD_GRAYSCALE)
     img2 = cv2.imread(opt_b['path'], cv2.IMREAD_GRAYSCALE)
 
@@ -169,16 +187,19 @@ if __name__ == '__main__':
     y0b += xy2[1]
 
     threshold_m1m2_ratio = opts['threshold_m1m2_ratio']
-    H_ = compare(img1_, img2_,                                    # 已切割和缩小图像对的(B->A)透视矩阵
-                 opts['imgMatch'],
-                 maxpoints1=opt_a['maxpoint_sift'],
-                 maxpoints2=opt_b['maxpoint_sift'],
-                 threshold_m1m2_ratio=threshold_m1m2_ratio)
+    H_, matchs = compare(img1_, img2_,                            # 已切割和缩小图像对的(B->A)透视矩阵
+        opts['imgMatch'],
+        maxpoints1=opt_a['maxpoint_sift'],
+        maxpoints2=opt_b['maxpoint_sift'],
+        threshold_m1m2_ratio=threshold_m1m2_ratio)
     H_orig = H_transpose(                                         # 原图像对的(B->A)透视矩阵
         H_,
         x0_d=x0a, y0_d=y0a, zoom_d=n1,
         x0_s=x0b, y0_s=y0b, zoom_s=n2)
     print('mearused perspective matrix:\n', H_orig)
+    if len(matchs) < opts['minmatch']:
+        print('too few match keypoint pairs')
+        exit()
     # TODO: 更进一步，使用高分辨率的图像分块处理，进行更高精度的对齐
 
     x_a = x0a + img1_.shape[1]*na
@@ -190,13 +211,13 @@ if __name__ == '__main__':
     b_in_a = shapely.transform(rect_b, functools.partial(shaply_proj, H_orig))
 
     if opts['addto_db']:
-        db = database.Database('data/imagery.db')
         assert H_orig.shape == (3,3)
         H_blob = H_orig.astype(np.float64).tobytes()
-        fid1, iid1 = import_img.import_img(db, opt_a['path'])
-        fid2, iid2 = import_img.import_img(db, opt_b['path'])
         # TODO: 检查数据库里是否已存在，避免UNIQUE约束错误
-        db.insert_match(iid1, iid2, H_blob, b_in_a.wkt)
+        if result_in_db is None:
+            db.insert_match(iid1, iid2, H_blob, b_in_a.wkt)
+        else:
+            db.update_match(iid1, iid2, H_blob, b_in_a.wkt)
         db.commit()
         db.close()
 
