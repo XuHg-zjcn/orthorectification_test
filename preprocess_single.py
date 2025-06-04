@@ -106,7 +106,10 @@ def preprocess(img, name='',
         x0 += l
         percent = (shapein[1]-(r-l+1))/shapein[1]
         print(f'{name} cropoff black edge left-right in y:[{l},{r+1}), drop {percent:.2%}')
-    if maxpixel_out is not None:
+    if  predown is not None and predown != 0:  # 直接指定了下采样倍率
+        img, n = auto_zoom(img, None, predown)
+        ndown *= n
+    elif maxpixel_out is not None:             # 没有指定倍率，但指定了SIFT最大分辨率
         if laplace:
             maxpix1 = maxpixel_out*dilsize**2
         else:

@@ -27,7 +27,7 @@ from metadata import read_metadata
 from imgmatch import H_transpose, compare, create_rb3dview
 import database
 import import_img
-from common import shaply_proj
+from common import shapely_perspective
 
 
 def parser_options():
@@ -208,7 +208,7 @@ if __name__ == '__main__':
     y_b = y0b + img2_.shape[0]*nb
     rect_a = shapely.polygons([(x0a, y0a), (x_a, y0a), (x_a, y_a), (x0a, y_a)])
     rect_b = shapely.polygons([(x0b, y0b), (x_b, y0b), (x_b, y_b), (x0b, y_b)])
-    b_in_a = shapely.transform(rect_b, functools.partial(shaply_proj, H_orig))
+    b_in_a = shapely_perspective(rect_b, H_orig)
 
     if opts['addto_db']:
         assert H_orig.shape == (3,3)

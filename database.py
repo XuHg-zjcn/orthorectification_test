@@ -18,6 +18,7 @@
 #############################################################################
 import sqlite3
 import os
+import shapely
 
 
 class Database:
@@ -46,10 +47,11 @@ class Database:
             'id INTEGER PRIMARY KEY AUTOINCREMENT,'
             'frameid INT,'  # 对应的快门事件，目前只支持一个
             'paths TEXT,'   # 文件的完整路径，用'\n'(换行符)分隔
-            'size INT,'
+            'size INT,'     # 相同大小和文件名视为同一图像文件
             'width INT,'
             'height INT,'
-            'geom POLYGON)'  # 相同大小和文件名视为同一图像文件
+            'geom POLYGON,'
+            'FOREIGN KEY (frameid) REFERENCES frames(id))'
         )
         cursor.execute(  # 图像匹配
             'CREATE TABLE IF NOT EXISTS matchs('
@@ -90,15 +92,33 @@ class Database:
             return idx[0]
         return None
 
-    def insert_img(self, frameid, paths, size):
+    def get_frame_geom(self, id_):
+        cursor = self.conn.cursor()
+        cursor.execute('SELECT ST_AsText(geom) FROM frames WHERE id=? LIMIT 1;', (id_,))
+        for geom in cursor:
+            return geom[0]
+        return None
+
+    def insert_img(self, frameid, paths, size, width, height):
         paths_str = ''.join(map(lambda x:x+'\n', paths))
         cursor = self.conn.cursor()
         cursor.execute(
-            'INSERT INTO images (frameid, paths, size) VALUES(?,?,?);',
-            (frameid, paths_str, size)
+            'INSERT INTO images (frameid, paths, size, width, height) VALUES(?,?,?,?,?);',
+            (frameid, paths_str, size, width, height)
         )
         cursor.execute('SELECT last_insert_rowid() FROM frames LIMIT 1;')
         return next(cursor)[0]
+
+    # 获取分幅扫描的KH影像文件
+    def get_splited_image(self, fid):
+        cursor = self.conn.cursor()
+        cursor.execute(
+            'SELECT id, paths, width, height '
+            'FROM images '
+            r"WHERE frameid=? AND paths LIKE '%\__.tif%' ESCAPE '\';",
+            (fid,)
+        )
+        return list(cursor)
 
     def get_img(self, path, size):
         cursor = self.conn.cursor()
@@ -137,6 +157,22 @@ class Database:
             (iid1, iid2))
         for i in cursor:
             return i
+
+    def get_intersect(self, fid):
+        cursor = self.conn.cursor()
+        cursor.execute(
+            "SELECT id, name, ST_ASText(geom), "
+            "ST_ASText(ST_Centroid(ST_Intersection(geom,"
+            "(SELECT geom FROM frames WHERE id=?))))"
+            "FROM frames;",
+            (fid,)
+        )
+        lst = []
+        for id_, name, wkt_poly, wkt_cpoint in cursor:
+            poly = shapely.from_wkt(wkt_poly)
+            cpoint = shapely.from_wkt(wkt_cpoint)
+            lst.append((id_, name, poly, cpoint))
+        return lst
 
     def commit(self):
         self.conn.commit()

@@ -23,7 +23,7 @@ import cv2
 from osgeo import gdal
 import numpy as np
 import shapely
-from common import shaply_proj
+from common import shapely_perspective
 
 
 # 透视矩阵在图像裁剪，缩放下的变换
@@ -53,6 +53,7 @@ def match_KNN_RANSAC(kps1, kps2, desc1, desc2, threshold_m1m2_ratio=0.8):
         matches_filterd.append(match1)
     match_points1 = np.array(match_points1, dtype=np.float32)
     match_points2 = np.array(match_points2, dtype=np.float32)
+    # FIXME: 修复此处点数不足产生的错误
     H, mask = cv2.findHomography(match_points2, match_points1, method=cv2.RANSAC, maxIters=10000, confidence=0.99)
     good_matches = [match for match, flag in zip(matches_filterd, mask) if flag]
     n_good = len(good_matches)
@@ -95,8 +96,8 @@ def compare(img1, img2,
     height_b, width_b = img2.shape
     rect_a = shapely.polygons([(0, 0), (width_a, 0), (width_a, height_a), (0, height_a)])
     rect_b = shapely.polygons([(0, 0), (width_b, 0), (width_b, height_b), (0, height_b)])
-    poly_b_in_a = shapely.transform(rect_b, functools.partial(shaply_proj, H1))
-    poly_a_in_b = shapely.transform(rect_a, functools.partial(shaply_proj, np.linalg.inv(H1)))
+    poly_b_in_a = shapely_perspective(rect_b, H1)
+    poly_a_in_b = shapely_perspective(rect_a, np.linalg.inv(H1))
 
     # 用多边形过滤特征点
     kps1_filted, desc1_filted = filter_sift_feat_by_polygon(poly_b_in_a, kps1, desc1)

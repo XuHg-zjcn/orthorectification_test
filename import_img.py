@@ -19,6 +19,7 @@
 import sys
 import os
 import re
+from osgeo import gdal
 import database
 import khseries_corners
 
@@ -66,15 +67,17 @@ def import_img(db, path):
     if re.match(pattern_spot, rpath):
         fid = process_spot_fid(path, rpath, name)
     if fid is None:
-        exit()
+        return None
     size = os.stat(rpath).st_size
+    ds = gdal.Open(rpath)
     iid = db.get_img(rpath, size)
     if iid is None:
-        iid = db.insert_img(fid, [rpath], size)
+        iid = db.insert_img(fid, [rpath], size, ds.RasterXSize, ds.RasterYSize)
         print(f'image insert to db, id={iid}')
     else:
         print(f'image already in db, id={iid}')
     print()
+    ds.Close()
     return fid, iid
 
 if __name__ == '__main__':

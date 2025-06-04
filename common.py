@@ -15,12 +15,28 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #############################################################################
+import functools
 import numpy as np
+import shapely
+import cv2
 
 
-def shaply_proj(H, x):
+def proj(H, x):
     ones = np.ones((x.shape[0], 1))
     x = np.concatenate((x, ones), axis=1)
     x = np.matmul(x, H.transpose())  #(A . x^T)^T = x . A^T
     x /= x[:,2].reshape((-1,1))
     return x[:,:2]
+
+def shapely_perspective(x, H):
+    return shapely.transform(x, functools.partial(proj, H))
+
+def findPerspective(x1, y1, x2, y2, coord_lt, coord_rt, coord_rb, coord_lb):
+    try:
+        H, _ = cv2.findHomography(
+            np.array([(x1, y1), (x2, y1), (x2, y2), (x1, y2)]),
+            np.array([coord_lt, coord_rt, coord_rb, coord_lb]))
+    except:
+        return None
+    else:
+        return H
