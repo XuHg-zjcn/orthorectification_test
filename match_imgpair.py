@@ -20,6 +20,7 @@ import sys
 import getopt
 import functools
 import cv2
+from osgeo import gdal
 import numpy as np
 import shapely
 from preprocess_single import preprocess, perspective_boundingbox
@@ -28,6 +29,7 @@ from imgmatch import H_transpose, compare, create_rb3dview
 import database
 import import_img
 from common import shapely_perspective
+from imgview import ImgView
 
 
 def parser_options():
@@ -129,8 +131,10 @@ if __name__ == '__main__':
             exit()
 
     # TODO: 使用GDAL读取遥感影像
-    img1 = cv2.imread(opt_a['path'], cv2.IMREAD_GRAYSCALE)
-    img2 = cv2.imread(opt_b['path'], cv2.IMREAD_GRAYSCALE)
+    ds1 = gdal.Open(opt_a['path'], gdal.GA_ReadOnly)
+    ds2 = gdal.Open(opt_b['path'], gdal.GA_ReadOnly)
+    iv1 = ImgView(ds1.GetRasterBand(1))
+    iv2 = ImgView(ds2.GetRasterBand(1))
 
     paraA = read_metadata(opt_a['path'])
     paraB = read_metadata(opt_b['path'])
@@ -147,32 +151,32 @@ if __name__ == '__main__':
         print('estimated perspective matrix by metadata:\n', Hx)  # 估计原图的透视矩阵
         bbox_at_coordA = perspective_boundingbox(
             Hx,
-            img1.shape[1], img1.shape[0],
-            img2.shape[1], img2.shape[0])
+            iv1.shape[1], iv1.shape[0],
+            iv2.shape[1], iv2.shape[0])
         print(bbox_at_coordA)
         bbox_at_coordB = perspective_boundingbox(
             np.linalg.inv(Hx),
-            img2.shape[1], img2.shape[0],
-            img1.shape[1], img1.shape[0])
+            iv2.shape[1], iv2.shape[0],
+            iv1.shape[1], iv1.shape[0])
         print(bbox_at_coordB)
 
-        img1 = img1[bbox_at_coordA[1]:bbox_at_coordA[3],
+        iv1 = iv1[bbox_at_coordA[1]:bbox_at_coordA[3],
                     bbox_at_coordA[0]:bbox_at_coordA[2]]
-        img2 = img2[bbox_at_coordB[1]:bbox_at_coordB[3],
+        iv2 = iv2[bbox_at_coordB[1]:bbox_at_coordB[3],
                     bbox_at_coordB[0]:bbox_at_coordB[2]]
         x0a += bbox_at_coordA[0]
         y0a += bbox_at_coordA[1]
         x0b += bbox_at_coordB[0]
         y0b += bbox_at_coordB[1]
 
-    img1_, n1, xy1 = preprocess(img1, 'img1',
+    img1_, n1, xy1 = preprocess(iv1, 'img1',
                                 maxpixel_out=opt_a['maxpixel_sift'],
                                 predown=opt_a['predown'],
                                 laplace=opt_a['laplace'],
                                 dilsize=opt_a['dilsize'],
                                 cutblack_topbottom=opt_a['cutblack_topbottom'],
                                 cutblack_leftright=opt_a['cutblack_leftright'])
-    img2_, n2, xy2 = preprocess(img2, 'img2',
+    img2_, n2, xy2 = preprocess(iv2, 'img2',
                                 maxpixel_out=opt_b['maxpixel_sift'],
                                 predown=opt_b['predown'],
                                 laplace=opt_b['laplace'],
@@ -221,5 +225,6 @@ if __name__ == '__main__':
         db.commit()
         db.close()
 
-    if opts['img3D'] is not None:
-        create_rb3dview(img1[:32766, :32766], img2[:32766,:32766], H_orig, opts['img3D']) #32766是由于SHRT_MAX限制
+    # TODO: 修复create_rb3dview实现
+    #if opts['img3D'] is not None:
+    #    create_rb3dview(img1[:32766, :32766], img2[:32766,:32766], H_orig, opts['img3D']) #32766是由于SHRT_MAX限制

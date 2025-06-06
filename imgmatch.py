@@ -117,6 +117,7 @@ def compare(img1, img2,
 # 创建红蓝3D图片
 def create_rb3dview(img1, img2, H, outpath):
     # TODO: 将图片切成多个部分后再处理
+    # FIXME: 由于目前使用GDAL+自定义ImgView类读取文件，此处会产生错误，待修复
     img2w = cv2.warpPerspective(img2, H, (img1.shape[1], img1.shape[0]))
     merge = cv2.merge([img2w, img2w, img1]) # BGR顺序
     cv2.imwrite(outpath, merge)

@@ -19,6 +19,7 @@
 import math
 import numpy as np
 import cv2
+from imgview import ImgView
 
 
 # 计算图像B透视投影到图像A中与图像A的交集在图像A的坐标系下的包围框
@@ -72,12 +73,22 @@ def auto_zoom(img, maxpixel=1e6, predown=None):
     if predown is not None and predown != 0:
         n = predown
     elif img.shape[0]*img.shape[1] <= maxpixel:
-        return img, 1
+        n = 1
     else:
         n = math.ceil(math.sqrt(img.shape[0]*img.shape[1]/maxpixel))
-    if n != 1:
-        img_ = cv2.resize(img, None, None, 1.0/n, 1.0/n, cv2.INTER_AREA)
+    if isinstance(img, ImgView):
+        img = img[::n, ::n].trim_scale()
+        n = img.scale
+        img_ = img.get_array()
         return img_, n
+    elif isinstance(img, np.ndarray):
+        if n != 1:
+            img_ = cv2.resize(img, None, None, 1.0/n, 1.0/n, cv2.INTER_AREA)
+            return img_, n
+        else:
+            return img, n
+    else:
+        raise TypeError(f'unknown type {type(img)}')
 
 def laplacian_and_dilate(img, nz):
     kern = cv2.getStructuringElement(cv2.MORPH_ELLIPSE if nz >= 5 else cv2.MORPH_RECT, (nz, nz))
@@ -93,19 +104,6 @@ def preprocess(img, name='',
     ndown = 1
     x0 = 0
     y0 = 0
-    shapein = img.shape
-    if cutblack_topbottom:
-        t, b = detect_edge_black(img, axis=0)
-        img = img[t:b+1]
-        y0 += t
-        percent = (shapein[0]-(b-t+1))/shapein[0]
-        print(f'{name} cropoff black edge top-bottom in x:[{t},{b+1}), drop {percent:.2%}')
-    if cutblack_leftright:
-        l, r = detect_edge_black(img, axis=1)
-        img = img[:, l:r+1]
-        x0 += l
-        percent = (shapein[1]-(r-l+1))/shapein[1]
-        print(f'{name} cropoff black edge left-right in y:[{l},{r+1}), drop {percent:.2%}')
     if  predown is not None and predown != 0:  # 直接指定了下采样倍率
         img, n = auto_zoom(img, None, predown)
         ndown *= n
@@ -116,6 +114,19 @@ def preprocess(img, name='',
             maxpix1 = maxpixel_out
         img, n = auto_zoom(img, maxpix1, predown)
         ndown *= n
+    shape_down = img.shape
+    if cutblack_topbottom:
+        t, b = detect_edge_black(img, axis=0)
+        img = img[t:b+1]
+        y0 += t
+        percent = (shape_down[0]-(b-t+1))/shape_down[0]
+        print(f'{name} cropoff black edge top-bottom in x:[{t},{b+1}), drop {percent:.2%}')
+    if cutblack_leftright:
+        l, r = detect_edge_black(img, axis=1)
+        img = img[:, l:r+1]
+        x0 += l
+        percent = (shape_down[1]-(r-l+1))/shape_down[1]
+        print(f'{name} cropoff black edge left-right in y:[{l},{r+1}), drop {percent:.2%}')
     if laplace:
         img = laplacian_and_dilate(img, dilsize)
         ndown *= dilsize

@@ -22,12 +22,14 @@ import functools
 import bisect
 import numpy as np
 import cv2
+from osgeo import gdal
 import shapely
 import database
 import import_img
 from common import shapely_perspective, findPerspective
 from preprocess_single import preprocess
 from imgmatch import compare
+from imgview import ImgView
 
 
 def plusminus(nmax, n0, plusmax=None, minumax=None):
@@ -62,8 +64,9 @@ def get_corners_coord(geom):
 def compare_to(imgA_cut, pathB, name, ratio):
     print(f'compare with {pathB}')
     try:
-        imgB = cv2.imread(pathB, cv2.IMREAD_GRAYSCALE)
-        imgB_, nB, xyB = preprocess(imgB, 'imgB',
+        dsB = gdal.Open(pathB, gdal.GA_ReadOnly)
+        ivB = ImgView(dsB.GetRasterBand(1))
+        imgB_, nB, xyB = preprocess(ivB, 'imgB',
                             maxpixel_out=None,
                             predown=round(ratio/8),
                             laplace=True,
@@ -95,8 +98,9 @@ if __name__ == '__main__':
     coord_nw, coord_ne, coord_sw, coord_se = get_corners_coord(geom)
     print(coord_nw, coord_ne, coord_sw, coord_se)
 
-    imgA = cv2.imread(sys.argv[1], cv2.IMREAD_GRAYSCALE)
-    imgA_, nA, xyA = preprocess(imgA, 'imgA',
+    dsA = gdal.Open(sys.argv[1], gdal.GA_ReadOnly)
+    ivA = ImgView(dsA.GetRasterBand(1))
+    imgA_, nA, xyA = preprocess(ivA, 'imgA',
                                 maxpixel_out=None,
                                 predown=2,
                                 laplace=True,
@@ -104,7 +108,7 @@ if __name__ == '__main__':
                                 cutblack_topbottom=True,
                                 cutblack_leftright=True)
 
-    print('imgA.shape', imgA.shape)
+    print('ivA.shape', ivA.shape)
     print('imgA_.shape', imgA_.shape)
     A_height, A_width = imgA_.shape
     H = findPerspective(0, 0, A_width, A_height,
