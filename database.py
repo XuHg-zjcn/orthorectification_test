@@ -120,7 +120,7 @@ class Database:
         )
         return list(cursor)
 
-    def get_img(self, path, size):
+    def get_img(self, path, size, fid=None):
         cursor = self.conn.cursor()
         cursor.execute(
             "SELECT id FROM images WHERE size=? AND paths LIKE ? LIMIT 1;",
@@ -128,9 +128,14 @@ class Database:
         for idx in cursor:
             return idx
         filename = os.path.basename(path)
-        cursor.execute(
-            "SELECT id, paths FROM images WHERE size=? AND paths LIKE ? LIMIT 1;",
-            (size, '%/'+filename+'\n%'))
+        if fid is not None:
+            cursor.execute(
+                "SELECT id, paths FROM images WHERE size=? AND frameid=? AND paths LIKE ? LIMIT 1;",
+                (size, fid, '%/'+filename+'\n%'))
+        else:
+            cursor.execute(
+                "SELECT id, paths FROM images WHERE size=? AND paths LIKE ? LIMIT 1;",
+                (size, '%/'+filename+'\n%'))
         for idx, paths in cursor:
             path_lst =  paths.split('\n')
             if any(map(lambda x:filename==os.path.basename(x), path_lst)):
