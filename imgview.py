@@ -19,6 +19,7 @@
 import math
 from osgeo import gdal
 import cv2
+from common import CropZoom2D
 
 
 def pow2_count(x):
@@ -66,18 +67,24 @@ class ImgView:
     def shape(self):
         return (self.ysize, self.xsize)
 
-    # using like numpy array
-    def __getitem__(self, key):
-        slice_x = key[1]
-        slice_y = key[0]
-        assert isinstance(slice_x, slice)
-        assert isinstance(slice_y, slice)
+    def view_numpy_like(self, slice_x, slice_y):
         assert slice_x.step == slice_y.step
         x0_, xsize_, xscale_ = apply_slice(self.x0, self.xsize, self.scale, slice_x)
         y0_, ysize_, yscale_ = apply_slice(self.y0, self.ysize, self.scale, slice_y)
         assert xscale_ == yscale_
         scale_ = xscale_
         return ImgView(self.band, x0_, y0_, scale_, xsize_, ysize_)
+
+    def view_cropzoom(self, cz):
+        return ImgView(self.band, cz.x0, cz.y0, cz.nz, cz.wo, cz.ho)
+
+    def __getitem__(self, key):
+        if isinstance(key, tuple) and len(key) == 2 and isinstance(key[0], slice) and isinstance(key[1], slice):
+            return self.view_numpy_like(key[1], key[0])
+        elif isinstance(key, CropZoom2D):
+            return self.view_cropzoom(key)
+        else:
+            raise TypeError(f'unknown key type {type(key)}')
 
     def trim_scale(self):
         if self.band.GetOverviewCount() == 0:

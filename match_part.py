@@ -24,6 +24,8 @@ import import_img
 from imgview import ImgView
 from preprocess_single import preprocess
 from imgmatch import compare, H_transpose
+from imgmatch2 import ImgMatch
+from common import CropZoom2D
 
 
 if __name__ == '__main__':
@@ -53,19 +55,21 @@ if __name__ == '__main__':
                 print('already in db')
                 continue
             dsA = gdal.Open(pathA, gdal.GA_ReadOnly)
-            ivA = ImgView(dsA.GetRasterBand(1))[::2, -3000::2]
+            ivA = ImgView(dsA.GetRasterBand(1))
             dsB = gdal.Open(pathB, gdal.GA_ReadOnly)
-            ivB = ImgView(dsB.GetRasterBand(1))[::2, :3000:2]
-            imgA_ = ivA.get_array()
-            imgB_ = ivB.get_array()
-            H_, _ = compare(imgA_, imgB_,  # 已切割和缩小图像对的(B->A)透视矩阵
-                outpath_match=f'data/match_{iidA}_{iidB}.jpg',
-                maxpoints1=5000, maxpoints2=5000,
-                threshold_m1m2_ratio=0.8)
-            H_orig = H_transpose(          # 原图像对的(B->A)透视矩阵
-                H_,
-                x0_d=ivA.x0, y0_d=ivA.y0, zoom_d=ivA.scale,
-                x0_s=ivB.x0, y0_s=ivB.y0, zoom_s=ivB.scale)
+            ivB = ImgView(dsB.GetRasterBand(1))
+            im = ImgMatch(ivA, ivB)
+            im.set_estA(CropZoom2D.with_shape(ivA.shape)[::2, -3000::2])
+            im.set_estB(CropZoom2D.with_shape(ivB.shape)[::2, :3000:2])
+            im.setParam_preprocessA()
+            im.setParam_preprocessB()
+            im.setParam_compare(outpath_match=f'data/match_{iidA}_{iidB}.jpg',
+                                maxpoints1=5000, maxpoints2=5000,
+                                threshold_m1m2_ratio=0.8)
+            H_orig, n_match = im.match()
+            if H_orig is None:
+                print('match failed')
+                continue
             print(H_orig)
             assert H_orig.shape == (3,3)
             H_blob = H_orig.astype(np.float64).tobytes()

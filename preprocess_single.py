@@ -114,6 +114,8 @@ def preprocess(img, name='',
             maxpix1 = maxpixel_out
         img, n = auto_zoom(img, maxpix1, predown)
         ndown *= n
+    elif isinstance(img, ImgView):
+        img = img.get_array()
     shape_down = img.shape
     if cutblack_topbottom:
         t, b = detect_edge_black(img, axis=0)

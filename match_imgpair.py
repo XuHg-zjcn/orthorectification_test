@@ -28,8 +28,9 @@ from metadata import read_metadata
 from imgmatch import H_transpose, compare, create_rb3dview
 import database
 import import_img
-from common import shapely_perspective
+from common import shapely_perspective, CropZoom2D
 from imgview import ImgView
+from imgmatch2 import ImgMatch
 
 
 def parser_options():
@@ -139,12 +140,7 @@ if __name__ == '__main__':
     paraA = read_metadata(opt_a['path'])
     paraB = read_metadata(opt_b['path'])
     hasMetadata = False
-    x0a = 0
-    y0a = 0
-    x0b = 0
-    y0b = 0
-    na = 1
-    nb = 1
+    im = ImgMatch(iv1, iv2)
     if paraA is not None and paraB is not None:
         hasMetadata = True
         Hx = np.matmul(np.linalg.inv(paraA[1]), paraB[1])
@@ -160,61 +156,41 @@ if __name__ == '__main__':
             iv1.shape[1], iv1.shape[0])
         print(bbox_at_coordB)
 
-        iv1 = iv1[bbox_at_coordA[1]:bbox_at_coordA[3],
-                    bbox_at_coordA[0]:bbox_at_coordA[2]]
-        iv2 = iv2[bbox_at_coordB[1]:bbox_at_coordB[3],
-                    bbox_at_coordB[0]:bbox_at_coordB[2]]
-        x0a += bbox_at_coordA[0]
-        y0a += bbox_at_coordA[1]
-        x0b += bbox_at_coordB[0]
-        y0b += bbox_at_coordB[1]
+        cz1 = CropZoom2D.with_shape(iv1.shape,
+            x0=bbox_at_coordA[0],y0=bbox_at_coordA[1],
+            x1=bbox_at_coordA[2],y1=bbox_at_coordA[3])
+        cz2 = CropZoom2D.with_shape(iv2.shape,
+            x0=bbox_at_coordB[0],y0=bbox_at_coordB[1],
+            x1=bbox_at_coordB[2],y1=bbox_at_coordB[3])
+        im.set_estA(cz1)
+        im.set_estB(cz2)
 
-    img1_, n1, xy1 = preprocess(iv1, 'img1',
-                                maxpixel_out=opt_a['maxpixel_sift'],
-                                predown=opt_a['predown'],
-                                laplace=opt_a['laplace'],
-                                dilsize=opt_a['dilsize'],
-                                cutblack_topbottom=opt_a['cutblack_topbottom'],
-                                cutblack_leftright=opt_a['cutblack_leftright'])
-    img2_, n2, xy2 = preprocess(iv2, 'img2',
-                                maxpixel_out=opt_b['maxpixel_sift'],
-                                predown=opt_b['predown'],
-                                laplace=opt_b['laplace'],
-                                dilsize=opt_b['dilsize'],
-                                cutblack_topbottom=opt_b['cutblack_topbottom'],
-                                cutblack_leftright=opt_b['cutblack_leftright'])
-    na *= n1
-    nb *= n2
-    x0a += xy1[0]
-    y0a += xy1[1]
-    x0b += xy2[0]
-    y0b += xy2[1]
-
-    threshold_m1m2_ratio = opts['threshold_m1m2_ratio']
-    H_, matchs = compare(img1_, img2_,                            # 已切割和缩小图像对的(B->A)透视矩阵
-        opts['imgMatch'],
-        maxpoints1=opt_a['maxpoint_sift'],
-        maxpoints2=opt_b['maxpoint_sift'],
-        threshold_m1m2_ratio=threshold_m1m2_ratio)
-    if H_ is None:
+    im.setParam_preprocessA(maxpixel_out=opt_a['maxpixel_sift'],
+                            predown=opt_a['predown'],
+                            laplace=opt_a['laplace'],
+                            dilsize=opt_a['dilsize'],
+                            cutblack_topbottom=opt_a['cutblack_topbottom'],
+                            cutblack_leftright=opt_a['cutblack_leftright'])
+    im.setParam_preprocessB(maxpixel_out=opt_b['maxpixel_sift'],
+                            predown=opt_b['predown'],
+                            laplace=opt_b['laplace'],
+                            dilsize=opt_b['dilsize'],
+                            cutblack_topbottom=opt_b['cutblack_topbottom'],
+                            cutblack_leftright=opt_b['cutblack_leftright'])
+    im.setParam_compare(outpath_match=opts['imgMatch'],
+                        maxpoints1=opt_a['maxpoint_sift'],
+                        maxpoints2=opt_b['maxpoint_sift'],
+                        threshold_m1m2_ratio=opts['threshold_m1m2_ratio'])
+    H_orig, n_match = im.match()
+    if H_orig is None:
         print('match failed')
-        exit()
-    H_orig = H_transpose(                                         # 原图像对的(B->A)透视矩阵
-        H_,
-        x0_d=x0a, y0_d=y0a, zoom_d=n1,
-        x0_s=x0b, y0_s=y0b, zoom_s=n2)
     print('mearused perspective matrix:\n', H_orig)
-    if len(matchs) < opts['minmatch']:
+    if n_match < opts['minmatch']:
         print('too few match keypoint pairs')
         exit()
-    # TODO: 更进一步，使用高分辨率的图像分块处理，进行更高精度的对齐
 
-    x_a = x0a + img1_.shape[1]*na
-    y_a = y0a + img1_.shape[0]*na
-    x_b = x0b + img2_.shape[1]*nb
-    y_b = y0b + img2_.shape[0]*nb
-    rect_a = shapely.polygons([(x0a, y0a), (x_a, y0a), (x_a, y_a), (x0a, y_a)])
-    rect_b = shapely.polygons([(x0b, y0b), (x_b, y0b), (x_b, y_b), (x0b, y_b)])
+    rect_a = shapely.box(0, 0, iv1.shape[1], iv1.shape[0])
+    rect_b = shapely.box(0, 0, iv2.shape[1], iv2.shape[0])
     b_in_a = shapely_perspective(rect_b, H_orig)
 
     if opts['addto_db']:
