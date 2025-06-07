@@ -26,7 +26,7 @@ from osgeo import gdal
 import shapely
 import database
 import import_img
-from common import shapely_perspective, findPerspective
+from common import shapely_perspective, findPerspective, try_func
 from preprocess_single import preprocess
 from imgmatch import compare
 from imgview import ImgView
@@ -63,29 +63,22 @@ def get_corners_coord(geom):
 
 def compare_to(imgA_cut, pathB, name, ratio):
     print(f'compare with {pathB}')
-    try:
-        dsB = gdal.Open(pathB, gdal.GA_ReadOnly)
-        ivB = ImgView(dsB.GetRasterBand(1))
-        imgB_, nB, xyB = preprocess(ivB, 'imgB',
-                            maxpixel_out=None,
-                            predown=round(ratio/8),
-                            laplace=True,
-                            dilsize=8,
-                            cutblack_topbottom=True,
-                            cutblack_leftright=True)
-        H_, matchs = compare(imgA_cut, imgB_,
-                            f'data/match_levels_{name}.jpg',
-                            maxpoints1=2000,
-                            maxpoints2=2000,
-                            threshold_m1m2_ratio=0.85)
-    except:
-        pass
-    else:
-        print(H_, len(matchs))
-        if len(matchs) > 12:
-            return H_, matchs
-        else:
-            return None
+    dsB = gdal.Open(pathB, gdal.GA_ReadOnly)
+    ivB = ImgView(dsB.GetRasterBand(1))
+    imgB_, nB, xyB = preprocess(
+        ivB, 'imgB',
+        maxpixel_out=None,
+        predown=round(ratio/8),
+        laplace=True,
+        dilsize=8,
+        cutblack_topbottom=True,
+        cutblack_leftright=True)
+    H_, matchs = compare(imgA_cut, imgB_,
+                         f'data/match_levels_{name}.jpg',
+                         maxpoints1=2000,
+                         maxpoints2=2000,
+                         threshold_m1m2_ratio=0.85)
+    return H_, len(matchs)
 
 
 # 目前只支持KH-9低分辨率相机和高分辨率相机的影像匹配
@@ -158,10 +151,14 @@ if __name__ == '__main__':
 
         for i in plusminus(len(lst), nth_img, 3, 3):
             pathB = lst[i][1].split('\n')[0]
-            retval = compare_to(imgA_cut, pathB, os.path.basename(pathB), ratio)
-            if retval is not None:
-                # TODO: 对其他分幅进行匹配
-                break
+            retval = try_func(compare_to, imgA_cut, pathB, os.path.basename(pathB), ratio)
+            if retval is None:
+                continue
+            H_B_to_Ap, n_match = retval
+            if n_match < 12:
+                continue
+            # TODO: 对其他分幅进行匹配
+            break
             print('--------------------------')
         # TODO: 匹配结果添加到数据库
         print('==========================')

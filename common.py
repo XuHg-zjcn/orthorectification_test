@@ -40,3 +40,12 @@ def findPerspective(x1, y1, x2, y2, coord_lt, coord_rt, coord_rb, coord_lb):
         return None
     else:
         return H
+
+def try_func(f, *args, **kwargs):
+    try:
+        retval = f(*args, **kwargs)
+    except Exception as e:
+        print(e)
+        return None
+    else:
+        return retval

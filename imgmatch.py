@@ -40,8 +40,13 @@ def H_transpose(H, x0_s=0, y0_s=0, x0_d=0, y0_d=0, zoom_s=1, zoom_d=1):
     return H2
 
 def match_KNN_RANSAC(kps1, kps2, desc1, desc2, threshold_m1m2_ratio=0.8):
+    if min(len(kps1), len(kps2)) < 4:
+        return None, []
     flann = cv2.FlannBasedMatcher()
-    matches = flann.knnMatch(desc1, desc2, k=2)
+    try:
+        matches = flann.knnMatch(desc1, desc2, k=2)
+    except:
+        return None, []
     matches_filterd = []
     match_points1 = []
     match_points2 = []
@@ -53,8 +58,10 @@ def match_KNN_RANSAC(kps1, kps2, desc1, desc2, threshold_m1m2_ratio=0.8):
         matches_filterd.append(match1)
     match_points1 = np.array(match_points1, dtype=np.float32)
     match_points2 = np.array(match_points2, dtype=np.float32)
-    # FIXME: 修复此处点数不足产生的错误
-    H, mask = cv2.findHomography(match_points2, match_points1, method=cv2.RANSAC, maxIters=10000, confidence=0.99)
+    try:
+        H, mask = cv2.findHomography(match_points2, match_points1, method=cv2.RANSAC, maxIters=10000, confidence=0.99)
+    except:
+        return None, []
     good_matches = [match for match, flag in zip(matches_filterd, mask) if flag]
     n_good = len(good_matches)
     return H, good_matches
@@ -89,6 +96,8 @@ def compare(img1, img2,
     print(f'found {len(kps2)} keypoints in img2')
 
     H1, good1 = match_KNN_RANSAC(kps1, kps2, desc1, desc2, threshold_m1m2_ratio)
+    if H1 is None:
+        return None, []
     print(f'first matched {len(good1)} keypoints')
 
     # 生成两张图片中对应区域的多边形
@@ -107,6 +116,8 @@ def compare(img1, img2,
 
     # 再次匹配特征向量
     H2, good2 = match_KNN_RANSAC(kps1_filted, kps2_filted, desc1_filted, desc2_filted, threshold_m1m2_ratio)
+    if H2 is None:
+        return None, []
     print(f'second matched {len(good2)} keypoints')
 
     if outpath_match is not None:

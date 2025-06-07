@@ -196,6 +196,9 @@ if __name__ == '__main__':
         maxpoints1=opt_a['maxpoint_sift'],
         maxpoints2=opt_b['maxpoint_sift'],
         threshold_m1m2_ratio=threshold_m1m2_ratio)
+    if H_ is None:
+        print('match failed')
+        exit()
     H_orig = H_transpose(                                         # 原图像对的(B->A)透视矩阵
         H_,
         x0_d=x0a, y0_d=y0a, zoom_d=n1,
