@@ -16,18 +16,21 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #############################################################################
+import numpy as np
 from preprocess_single import preprocess
+from imgview import ImgView
 from imgmatch import compare, H_transpose
 from common import CropZoom2D
 
+
 class ImgMatch:
     def __init__(self, imgA, imgB):
-        self.imgA = imgA
+        self.imgA = imgA  # imgA, imgB可以是np.ndarray或ImgView类型
         self.imgB = imgB
-        self.ppA = None
+        self.ppA = None   # 预处理参数(Preprocess Param)
         self.ppB = None
-        self.cp = None
-        self.estA = None
+        self.cp = None    # 对比参数(Compare Param)
+        self.estA = None  # 估计区域
         self.estB = None
 
     def set_estA(self, estA):
@@ -35,6 +38,12 @@ class ImgMatch:
 
     def set_estB(self, estB):
         self.estB = estB
+
+    def setParam_preprocessA_empty(self):
+        self.ppA = ([], {})
+
+    def setParam_preprocessB_empty(self):
+        self.ppB = ([], {})
 
     def setParam_preprocessA(self, *args, **kwargs):
         self.ppA = (args, kwargs)
@@ -46,22 +55,22 @@ class ImgMatch:
         self.cp = (args, kwargs)
 
     def match(self):
+        def preprocess_and_transfrom(imgX, estX, ppX, name):
+            estX = estX if estX is not None else CropZoom2D.with_shape(imgX.shape)
+            if isinstance(imgX, ImgView):
+                imgX = imgX[estX]
+            elif isinstance(imgX, np.ndarray):
+                imgX = imgX[estX.to_slice()]
+            imgX_, nX, xyX = preprocess(imgX, name, *ppX[0], **ppX[1])
+            czpX = CropZoom2D(x0=xyX[0], y0=xyX[1], nz=nX, wo=imgX_.shape[1], ho=imgX_.shape[0])
+            czoX = estX.fog(czpX)
+            return imgX_, czoX
         # TODO: 暂存预处理后的数据
-        imgA = self.imgA
-        imgB = self.imgB
-        estA = self.estA if self.estA is not None else CropZoom2D.with_shape(self.imgA.shape)
-        estB = self.estB if self.estB is not None else CropZoom2D.with_shape(self.imgB.shape)
-        imgA = imgA[estA]
-        imgB = imgB[estB]
-        imgA_, nA, xyA = preprocess(imgA, 'imgA', *self.ppA[0], **self.ppA[1])
-        imgB_, nB, xyB = preprocess(imgB, 'imgB', *self.ppB[0], **self.ppB[1])
+        imgA_, czoA = preprocess_and_transfrom(self.imgA, self.estA, self.ppA, 'imgA')
+        imgB_, czoB = preprocess_and_transfrom(self.imgB, self.estB, self.ppB, 'imgB')
         H_, matchs = compare(imgA_, imgB_, *self.cp[0], **self.cp[1])
         if H_ is None:
             return None, 0
-        czpA = CropZoom2D(x0=xyA[0], y0=xyA[1], nz=nA, wo=imgA_.shape[1], ho=imgA_.shape[0])
-        czpB = CropZoom2D(x0=xyB[0], y0=xyB[1], nz=nB, wo=imgB_.shape[1], ho=imgB_.shape[0])
-        czoA = estA.fog(czpA)
-        czoB = estB.fog(czpB)
         H = H_transpose(
             H_,
             x0_d=czoA.x0, y0_d=czoA.y0, zoom_d=czoA.nz,

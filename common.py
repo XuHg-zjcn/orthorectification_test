@@ -106,6 +106,9 @@ class CropZoom1D:
     def __getitem__(self, key):
         return self.fog(CropZoom1D.with_length(self.wo, x0=key.start, x1=key.stop, nz=key.step))
 
+    def to_slice(self):
+        return slice(self.x0, self.x1, self.nz)
+
     @property
     def x0(self):
         return self._x0
@@ -165,6 +168,10 @@ class CropZoom2D:
         slice_x = key[1]
         slice_y = key[0]
         return CropZoom2D(self.x[slice_x], self.y[slice_y])
+
+    def to_slice(self):
+        return (slice(self.y0, self.y1, self.nz),
+                slice(self.x0, self.x1, self.nz))
 
     @property
     def x0(self):
