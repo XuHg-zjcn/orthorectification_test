@@ -20,6 +20,7 @@ import sys
 import os
 import functools
 import bisect
+import argparse
 import numpy as np
 import cv2
 from osgeo import gdal
@@ -61,7 +62,11 @@ def get_corners_coord(geom):
     return coord_nw, coord_ne, coord_sw, coord_se
 
 
-def compare_to(imgA_, cut_A, pathB, name, ratio):
+def compare_to(
+        imgA_, cut_A,
+        pathB, name, ratio,
+        maxpointA=2000, maxpointB=2000,
+        threshold_m1m2_ratio=0.85):
     print(f'compare with {pathB}')
     dsB = gdal.Open(pathB, gdal.GA_ReadOnly)
     ivB = ImgView(dsB.GetRasterBand(1))
@@ -77,9 +82,9 @@ def compare_to(imgA_, cut_A, pathB, name, ratio):
         cutblack_leftright=True)
     im.setParam_compare(
         outpath_match=f'data/match_levels_{name}.jpg',
-        maxpoints1=2000,
-        maxpoints2=2000,
-        threshold_m1m2_ratio=0.85)
+        maxpoints1=maxpointA,
+        maxpoints2=maxpointB,
+        threshold_m1m2_ratio=threshold_m1m2_ratio)
     H_, n_match = im.match()
     return H_, n_match
 
@@ -87,18 +92,28 @@ def compare_to(imgA_, cut_A, pathB, name, ratio):
 # 目前只支持KH-9低分辨率相机和高分辨率相机的影像匹配
 # TODO: 添加其他传感器支持
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--predownA', default=2, type=int)
+    parser.add_argument('--minmatch', default=12, type=int)
+    parser.add_argument('--extRangeA', default=0.2, type=float)
+    parser.add_argument('--plusminus', default=3, type=int)
+    parser.add_argument('--maxpointA', default=2000, type=int)
+    parser.add_argument('--maxpointB', default=2000, type=int)
+    parser.add_argument('--threshold_m1m2_ratio', default=0.85, type=float)
+    parser.add_argument('imgA', nargs=1)
+    args = parser.parse_args()
     db = database.Database('data/imagery.db')
-    # TODO: 添加命令行参数解析
-    fid, iid = import_img.import_img(db, sys.argv[1])
+    pathA = args.imgA[0]
+    fid, iid = import_img.import_img(db, pathA)
     geom = shapely.from_wkt(db.get_frame_geom(fid))
     coord_nw, coord_ne, coord_sw, coord_se = get_corners_coord(geom)
     print(coord_nw, coord_ne, coord_sw, coord_se)
 
-    dsA = gdal.Open(sys.argv[1], gdal.GA_ReadOnly)
+    dsA = gdal.Open(pathA, gdal.GA_ReadOnly)
     ivA = ImgView(dsA.GetRasterBand(1))
     imgA_, nA, xyA = preprocess(ivA, 'imgA',
                                 maxpixel_out=None,
-                                predown=2,
+                                predown=args.predownA,
                                 laplace=True,
                                 dilsize=8,
                                 cutblack_topbottom=True,
@@ -139,25 +154,28 @@ if __name__ == '__main__':
         ymax = lst[nth_img][3]
         B_in_A = shapely_perspective(shapely.box(x1, 0, x2, ymax), H_B_to_A)
         xmin, ymin, xmax, ymax = B_in_A.bounds
-        xdelta = max(100, xmax - xmin)
-        ydelta = max(100, ymax - ymin)
-        xmin = int(max(xmin-xdelta*0.2, 0))
-        xmax = int(min(xmax+xdelta*0.2, A_width))
-        ymin = int(max(ymin-ydelta*0.2, 0))
-        ymax = int(min(ymax+ydelta*0.2, A_height))
+        xdelta = max(100, xmax - xmin)*args.extRangeA
+        ydelta = max(100, ymax - ymin)*args.extRangeA
+        xmin = int(max(xmin-xdelta, 0))
+        xmax = int(min(xmax+xdelta, A_width))
+        ymin = int(max(ymin-ydelta, 0))
+        ymax = int(min(ymax+ydelta, A_height))
         alpha = H_B_to_A[2,0]*(x1+x2)/2 + H_B_to_A[2,1]*ymax/2 + H_B_to_A[2,2]
         ratio = 1/np.sqrt(np.sum((H_B_to_A[:2,:2]/alpha)**2)/2)
         print(xmin, xmax, ymin, ymax, ratio)
 
         cut_A = CropZoom2D(x0=xmin, x1=xmax, y0=ymin, y1=ymax, nz=1)
 
-        for i in plusminus(len(lst), nth_img, 3, 3):
+        for i in plusminus(len(lst), nth_img, args.plusminus, args.plusminus):
             pathB = lst[i][1].split('\n')[0]
-            retval = try_func(compare_to, imgA_, cut_A, pathB, os.path.basename(pathB), ratio)
+            retval = try_func(compare_to, imgA_, cut_A, pathB, os.path.basename(pathB), ratio,
+                             maxpointA=args.maxpointA,
+                             maxpointB=args.maxpointB,
+                             threshold_m1m2_ratio=args.threshold_m1m2_ratio)
             if retval is None:
                 continue
             H_B_to_Ap, n_match = retval
-            if n_match < 12:
+            if n_match < args.minmatch:
                 continue
             # TODO: 对其他分幅进行匹配
             break
