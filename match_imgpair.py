@@ -129,7 +129,6 @@ if __name__ == '__main__':
         if not opts['update_db']:
             exit()
 
-    # TODO: 使用GDAL读取遥感影像
     dsA = gdal.Open(opt_A['path'], gdal.GA_ReadOnly)
     dsB = gdal.Open(opt_B['path'], gdal.GA_ReadOnly)
     ivA = ImgView(dsA.GetRasterBand(1))
