@@ -88,6 +88,49 @@ def compare_to(
     H_, n_match = im.match()
     return H_, n_match
 
+def calc_Hb(lst, name, poly):
+    cum_width = np.cumsum(list(map(lambda x:x[2], lst)))
+    total_width = int(cum_width[-1])
+    mean_height = sum(map(lambda x:x[3], lst))/len(lst)
+    coord_nw, coord_ne, coord_sw, coord_se = get_corners_coord(poly)
+    if 'F' in name:
+        Hb = findPerspective(0, 0, total_width, mean_height,
+                                coord_nw, coord_ne, coord_se, coord_sw)
+    elif 'A' in name:
+        Hb = findPerspective(0, 0, total_width, mean_height,
+                                coord_se, coord_sw, coord_nw, coord_ne)
+    else:
+        print('unkown camera type')
+        return None, None
+    return Hb
+
+def choiceImagePartInFrame(cpoint_inB, lst):
+    cum_width = np.cumsum(list(map(lambda x:x[2], lst)))
+    total_width = int(cum_width[-1])
+    mean_height = sum(map(lambda x:x[3], lst))/len(lst)
+    nth_img = bisect.bisect(cum_width, cpoint_inB.x)-1
+    print('cpoint_inB', cpoint_inB, nth_img)
+    x1 = cum_width[nth_img]
+    x2 = cum_width[nth_img+1]
+    ymax = lst[nth_img][3]
+    B_polygon = shapely.box(x1, 0, x2, ymax)
+    return nth_img, B_polygon
+
+def calcBox_inA(H_B_to_A, A_shape, B_polygon, extRangeA=0.2):
+    B_in_A = shapely_perspective(B_polygon, H_B_to_A)
+    xmin, ymin, xmax, ymax = B_in_A.bounds
+    xdelta = max(100, xmax - xmin)*extRangeA
+    ydelta = max(100, ymax - ymin)*extRangeA
+    A_height, A_width = A_shape
+    xmin = int(max(xmin-xdelta, 0))
+    xmax = int(min(xmax+xdelta, A_width))
+    ymin = int(max(ymin-ydelta, 0))
+    ymax = int(min(ymax+ydelta, A_height))
+    x1, y1, x2, y2 = B_polygon.bounds
+    alpha = H_B_to_A[2,0]*(x1+x2)/2 + H_B_to_A[2,1]*(y1+y2)/2 + H_B_to_A[2,2]
+    ratio = 1/np.sqrt(np.sum((H_B_to_A[:2,:2]/alpha)**2)/2)
+    return xmin, ymin, xmax, ymax, ratio
+
 
 # 目前只支持KH-9低分辨率相机和高分辨率相机的影像匹配
 # TODO: 添加其他传感器支持
@@ -122,46 +165,20 @@ if __name__ == '__main__':
     print('ivA.shape', ivA.shape)
     print('imgA_.shape', imgA_.shape)
     A_height, A_width = imgA_.shape
-    H = findPerspective(0, 0, A_width, A_height,
-                        coord_ne, coord_se, coord_sw, coord_nw)
-    Hinv = np.linalg.inv(H)
+    H_A_to_geo = findPerspective(0, 0, A_width, A_height,
+                                coord_ne, coord_se, coord_sw, coord_nw)
+    H_geo_to_A = np.linalg.inv(H_A_to_geo)
 
     for fid, name, poly, cpoint in db.get_intersect(fid):
-        cpoint_inA = shapely_perspective(cpoint, Hinv)
-        print(fid, name, cpoint, cpoint_inA)
         lst = db.get_splited_image(fid)
-        cum_width = np.cumsum(list(map(lambda x:x[2], lst)))
-        total_width = int(cum_width[-1])
-        mean_height = sum(map(lambda x:x[3], lst))/len(lst)
-        coord_nw, coord_ne, coord_sw, coord_se = get_corners_coord(poly)
-        if 'F' in name:
-            Hb = findPerspective(0, 0, total_width, mean_height,
-                                 coord_nw, coord_ne, coord_se, coord_sw)
-        elif 'A' in name:
-            Hb = findPerspective(0, 0, total_width, mean_height,
-                                 coord_se, coord_sw, coord_nw, coord_ne)
-        else:
-            print('unkown camera type')
+        H_B_to_geo = calc_Hb(lst, name, poly)
+        if H_B_to_geo is None:
             continue
-        Hbinv = np.linalg.inv(Hb)
-        cpoint_inB = shapely_perspective(cpoint, Hbinv)
-        nth_img = bisect.bisect(cum_width, cpoint_inB.x)-1
-        print('cpoint_inB', cpoint_inB, nth_img)
-        H_B_to_A = np.matmul(Hinv, Hb)
-        H_B_to_A /= H_B_to_A[-1, -1]
-        x1 = cum_width[nth_img]
-        x2 = cum_width[nth_img+1]
-        ymax = lst[nth_img][3]
-        B_in_A = shapely_perspective(shapely.box(x1, 0, x2, ymax), H_B_to_A)
-        xmin, ymin, xmax, ymax = B_in_A.bounds
-        xdelta = max(100, xmax - xmin)*args.extRangeA
-        ydelta = max(100, ymax - ymin)*args.extRangeA
-        xmin = int(max(xmin-xdelta, 0))
-        xmax = int(min(xmax+xdelta, A_width))
-        ymin = int(max(ymin-ydelta, 0))
-        ymax = int(min(ymax+ydelta, A_height))
-        alpha = H_B_to_A[2,0]*(x1+x2)/2 + H_B_to_A[2,1]*ymax/2 + H_B_to_A[2,2]
-        ratio = 1/np.sqrt(np.sum((H_B_to_A[:2,:2]/alpha)**2)/2)
+        H_geo_to_B = np.linalg.inv(H_B_to_geo)
+        H_B_to_A = np.matmul(H_geo_to_A, H_B_to_geo)
+        cpoint_inB = shapely_perspective(cpoint, H_geo_to_B)
+        nth_img, B_polygon = choiceImagePartInFrame(cpoint_inB, lst)
+        xmin, ymin, xmax, ymax, ratio = calcBox_inA(H_B_to_A, imgA_.shape, B_polygon, args.extRangeA)
         print(xmin, xmax, ymin, ymax, ratio)
 
         cut_A = CropZoom2D(x0=xmin, x1=xmax, y0=ymin, y1=ymax, nz=1)
