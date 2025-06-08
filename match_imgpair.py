@@ -123,9 +123,8 @@ if __name__ == '__main__':
     result_in_db = db.get_match(iid1, iid2)
     if result_in_db is not None:
         print('found in database')
-        transform_blob, area_b_in_a_wkt = result_in_db
+        H, area_b_in_a_wkt = result_in_db
         area_b_in_a = shapely.from_wkt(area_b_in_a_wkt)
-        H = np.frombuffer(transform_blob, dtype=np.float64).reshape((3, 3))
         print(H)
         print(area_b_in_a.wkt)
         if not opts['update_db']:
@@ -194,13 +193,11 @@ if __name__ == '__main__':
     b_in_a = shapely_perspective(rect_b, H_orig)
 
     if opts['addto_db']:
-        assert H_orig.shape == (3,3)
-        H_blob = H_orig.astype(np.float64).tobytes()
         # TODO: 检查数据库里是否已存在，避免UNIQUE约束错误
         if result_in_db is None:
-            db.insert_match(iid1, iid2, H_blob, b_in_a.wkt)
+            db.insert_match(iid1, iid2, H_orig, b_in_a.wkt)
         else:
-            db.update_match(iid1, iid2, H_blob, b_in_a.wkt)
+            db.update_match(iid1, iid2, H_orig, b_in_a.wkt)
         db.commit()
         db.close()
 

@@ -71,9 +71,7 @@ if __name__ == '__main__':
                 print('match failed')
                 continue
             print(H_orig)
-            assert H_orig.shape == (3,3)
-            H_blob = H_orig.astype(np.float64).tobytes()
-            db.insert_match(iidA, iidB, H_blob, None)
+            db.insert_match(iidA, iidB, H_orig, None)
             db.commit()
             print('--------------------------')
         print('==========================')

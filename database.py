@@ -18,6 +18,7 @@
 #############################################################################
 import sqlite3
 import os
+import numpy as np
 import shapely
 
 
@@ -142,17 +143,21 @@ class Database:
                 return idx
 
     def insert_match(self, iid1, iid2, transform, area_b_in_a):
+        assert transform.shape == (3,3)
+        transform_blob = transform.astype(np.float64).tobytes()
         cursor = self.conn.cursor()
         cursor.execute(
             'INSERT INTO matchs (a_imgid, b_imgid, transfrom, area_b_in_a) VALUES(?,?,?,ST_GeomFromText(?,0));',
-            (iid1, iid2, transform, area_b_in_a)
+            (iid1, iid2, transform_blob, area_b_in_a)
         )
 
     def update_match(self, iid1, iid2, transform, area_b_in_a):
+        assert transform.shape == (3,3)
+        transform_blob = transform.astype(np.float64).tobytes()
         cursor = self.conn.cursor()
         cursor.execute(
             'UPDATE matchs SET transfrom=?, area_b_in_a=ST_GeomFromText(?,0) WHERE a_imgid=? AND b_imgid=?;',
-            (transform, area_b_in_a, iid1, iid2)
+            (transform_blob, area_b_in_a, iid1, iid2)
         )
 
     def get_match(self, iid1, iid2):
@@ -160,8 +165,9 @@ class Database:
         cursor.execute(
             "SELECT transfrom, ST_AsText(area_b_in_a) FROM matchs WHERE a_imgid=? AND b_imgid=?;",
             (iid1, iid2))
-        for i in cursor:
-            return i
+        for transfrom_blob, area_b_in_a in cursor:
+            transfrom = np.frombuffer(transfrom_blob, np.float64).reshape((3, 3))
+            return transfrom, area_b_in_a
 
     def get_intersect(self, fid):
         cursor = self.conn.cursor()
