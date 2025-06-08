@@ -78,3 +78,7 @@ class ImgMatch:
         )
         # TODO: 更进一步，使用高分辨率的图像分块处理，进行更高精度的对齐
         return H, len(matchs)
+
+    def match_with_estH(self, H_est):
+        # TODO: 实现此方法
+        pass

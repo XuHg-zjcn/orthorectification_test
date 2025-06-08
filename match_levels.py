@@ -101,7 +101,7 @@ def calc_H_Frame_to_geo(lst, name, poly):
                                 coord_se, coord_sw, coord_nw, coord_ne)
     else:
         print('unkown camera type')
-        return None, None
+        return None
     return Hb
 
 def choiceImagePartInFrame(cpoint_inF, lst):
@@ -129,7 +129,57 @@ def calcBox_BinA(H_F_to_A, A_shape, poly_B_in_F, extRangeA=0.2):
     x1, y1, x2, y2 = poly_B_in_F.bounds
     alpha = H_F_to_A[2,0]*(x1+x2)/2 + H_F_to_A[2,1]*(y1+y2)/2 + H_F_to_A[2,2]
     ratio = 1/np.sqrt(np.sum((H_F_to_A[:2,:2]/alpha)**2)/2)
-    return xmin, ymin, xmax, ymax, ratio
+    return CropZoom2D(x0=xmin, y0=ymin, x1=xmax, y1=ymax, nz=1), ratio
+
+def calc_bbox_withH(D_shape, S_shape, H):
+    # 不应该在此阶段估计bbox，图像预处理后会切除边框，在预处理后再进行估计更准确
+    # 需在`ImgMatch`类实现`match_with_estH`方法
+    S_height, S_width = S_shape
+    D_height, D_width = D_shape
+    box_S = shapely.box(0, 0, S_width, S_height)
+    S_in_D = shapely_perspective(box_S, H)
+    box_D = shapely.box(0, 0, D_width, D_height)
+    if not shapely.intersects(S_in_D, box_D):
+        return None
+    xmin, ymin, xmax, ymax = S_in_D.bounds
+    xmin = int(max(xmin, 0))
+    xmax = int(min(xmax, D_width))
+    ymin = int(max(ymin, 0))
+    ymax = int(min(ymax, D_height))
+    alpha = H[2,0]*D_width/2 + H[2,1]*D_height/2 + H[2,2]
+    ratio = 1/np.sqrt(np.sum((H[:2,:2]/alpha)**2)/2)
+    return CropZoom2D(x0=xmin, y0=ymin, x1=xmax, y1=ymax, nz=1), ratio
+
+def match_other_oneway(db, imgA_, H_B_to_Ap, iB, lst, irange, **kwargs):
+    H_C_to_Ap = H_B_to_Ap
+    iC = iB
+    for iD in irange:
+        iidC = lst[iC][0]
+        iidD = lst[iD][0]
+        pathD = lst[iD][1].split('\n')[0]
+        nameD = os.path.basename(pathD)
+        D_shape = (lst[iD][3], lst[iD][2])
+        H_D_to_C = db.get_match_tranform_bidire(iidC, iidD)
+        if H_D_to_C is None:
+            break
+        H_D_to_Ap_est = np.matmul(H_C_to_Ap, H_D_to_C)
+        H_D_to_Ap_est /= H_D_to_Ap_est[-1, -1]
+        res = calc_bbox_withH(imgA_.shape, D_shape, H_D_to_Ap_est)
+        if res is None:
+            break
+        cut_A, ratio = res
+        H_D_to_Ap, n_match = compare_to(imgA_, cut_A, pathD, nameD+'e', ratio, **kwargs)
+        print(nameD, n_match)
+        if H_D_to_Ap is None:
+            break
+        iC = iD
+        H_C_to_Ap = H_D_to_Ap
+
+def match_other(db, imgA_, H_B_to_Ap, iB, lst, **kwargs):
+    print('match other forward')
+    match_other_oneway(db, imgA_, H_B_to_Ap, iB, lst, range(iB+1, len(lst)), **kwargs)
+    print('match other backward')
+    match_other_oneway(db, imgA_, H_B_to_Ap, iB, lst, range(iB-1, -1, -1), **kwargs)
 
 
 # 目前只支持KH-9低分辨率相机和高分辨率相机的影像匹配
@@ -178,10 +228,8 @@ if __name__ == '__main__':
         H_F_to_A = np.matmul(H_geo_to_A, H_F_to_geo)
         cpoint_inF = shapely_perspective(cpoint, H_geo_to_F)
         nth_img, poly_B_in_F = choiceImagePartInFrame(cpoint_inF, lst)
-        xmin, ymin, xmax, ymax, ratio = calcBox_BinA(H_F_to_A, imgA_.shape, poly_B_in_F, args.extRangeA)
-        print(xmin, xmax, ymin, ymax, ratio)
-
-        cut_A = CropZoom2D(x0=xmin, x1=xmax, y0=ymin, y1=ymax, nz=1)
+        cut_A, ratio = calcBox_BinA(H_F_to_A, imgA_.shape, poly_B_in_F, args.extRangeA)
+        print(cut_A, ratio)
 
         for i in plusminus(len(lst), nth_img, args.plusminus, args.plusminus):
             pathB = lst[i][1].split('\n')[0]
@@ -194,7 +242,7 @@ if __name__ == '__main__':
             H_B_to_Ap, n_match = retval
             if n_match < args.minmatch:
                 continue
-            # TODO: 对其他分幅进行匹配
+            match_other(db, imgA_, H_B_to_Ap, i, lst)
             break
             print('--------------------------')
         # TODO: 匹配结果添加到数据库

@@ -169,6 +169,15 @@ class Database:
             transfrom = np.frombuffer(transfrom_blob, np.float64).reshape((3, 3))
             return transfrom, area_b_in_a
 
+    def get_match_tranform_bidire(self, iid1, iid2):
+        res1 = self.get_match(iid1, iid2)
+        if res1 is not None:
+            return res1[0]
+        res2 = self.get_match(iid2, iid1)
+        if res2 is not None:
+            transfrom, _ = res2
+            return np.linalg.inv(transfrom)
+
     def get_intersect(self, fid):
         cursor = self.conn.cursor()
         cursor.execute(

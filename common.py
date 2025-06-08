@@ -109,6 +109,12 @@ class CropZoom1D:
     def to_slice(self):
         return slice(self.x0, self.x1, self.nz)
 
+    def __str__(self):
+        return f'x=[{self.x0}:{self.x1}], nz={self.nz}'
+
+    def __repr__(self):
+        return f'CropZoom2D(x0={self.x0}, x1={self.x1}, nz={self.nz})'
+
     @property
     def x0(self):
         return self._x0
@@ -172,6 +178,12 @@ class CropZoom2D:
     def to_slice(self):
         return (slice(self.y0, self.y1, self.nz),
                 slice(self.x0, self.x1, self.nz))
+
+    def __str__(self):
+        return f'x=[{self.x0}:{self.x1}], y=[{self.y0}:{self.y1}], nz={self.nz}'
+
+    def __repr__(self):
+        return f'CropZoom2D(x0={self.x0}, y0={self.y0}, x1={self.x1}, y1={self.y1}, nz={self.nz})'
 
     @property
     def x0(self):
