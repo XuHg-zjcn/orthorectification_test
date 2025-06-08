@@ -85,10 +85,10 @@ def compare_to(
         maxpoints1=maxpointA,
         maxpoints2=maxpointB,
         threshold_m1m2_ratio=threshold_m1m2_ratio)
-    H_, n_match = im.match()
-    return H_, n_match
+    H_B_to_Ap, n_match = im.match()
+    return H_B_to_Ap, n_match
 
-def calc_Hb(lst, name, poly):
+def calc_H_Frame_to_geo(lst, name, poly):
     cum_width = np.cumsum(list(map(lambda x:x[2], lst)))
     total_width = int(cum_width[-1])
     mean_height = sum(map(lambda x:x[3], lst))/len(lst)
@@ -104,20 +104,20 @@ def calc_Hb(lst, name, poly):
         return None, None
     return Hb
 
-def choiceImagePartInFrame(cpoint_inB, lst):
+def choiceImagePartInFrame(cpoint_inF, lst):
     cum_width = np.cumsum(list(map(lambda x:x[2], lst)))
     total_width = int(cum_width[-1])
     mean_height = sum(map(lambda x:x[3], lst))/len(lst)
-    nth_img = bisect.bisect(cum_width, cpoint_inB.x)-1
-    print('cpoint_inB', cpoint_inB, nth_img)
+    nth_img = bisect.bisect(cum_width, cpoint_inF.x)-1
+    print('cpoint in Frame', cpoint_inF, nth_img)
     x1 = cum_width[nth_img]
     x2 = cum_width[nth_img+1]
     ymax = lst[nth_img][3]
-    B_polygon = shapely.box(x1, 0, x2, ymax)
-    return nth_img, B_polygon
+    poly_B_in_F = shapely.box(x1, 0, x2, ymax)
+    return nth_img, poly_B_in_F
 
-def calcBox_inA(H_B_to_A, A_shape, B_polygon, extRangeA=0.2):
-    B_in_A = shapely_perspective(B_polygon, H_B_to_A)
+def calcBox_BinA(H_F_to_A, A_shape, poly_B_in_F, extRangeA=0.2):
+    B_in_A = shapely_perspective(poly_B_in_F, H_F_to_A)
     xmin, ymin, xmax, ymax = B_in_A.bounds
     xdelta = max(100, xmax - xmin)*extRangeA
     ydelta = max(100, ymax - ymin)*extRangeA
@@ -126,9 +126,9 @@ def calcBox_inA(H_B_to_A, A_shape, B_polygon, extRangeA=0.2):
     xmax = int(min(xmax+xdelta, A_width))
     ymin = int(max(ymin-ydelta, 0))
     ymax = int(min(ymax+ydelta, A_height))
-    x1, y1, x2, y2 = B_polygon.bounds
-    alpha = H_B_to_A[2,0]*(x1+x2)/2 + H_B_to_A[2,1]*(y1+y2)/2 + H_B_to_A[2,2]
-    ratio = 1/np.sqrt(np.sum((H_B_to_A[:2,:2]/alpha)**2)/2)
+    x1, y1, x2, y2 = poly_B_in_F.bounds
+    alpha = H_F_to_A[2,0]*(x1+x2)/2 + H_F_to_A[2,1]*(y1+y2)/2 + H_F_to_A[2,2]
+    ratio = 1/np.sqrt(np.sum((H_F_to_A[:2,:2]/alpha)**2)/2)
     return xmin, ymin, xmax, ymax, ratio
 
 
@@ -171,14 +171,14 @@ if __name__ == '__main__':
 
     for fid, name, poly, cpoint in db.get_intersect(fid):
         lst = db.get_splited_image(fid)
-        H_B_to_geo = calc_Hb(lst, name, poly)
-        if H_B_to_geo is None:
+        H_F_to_geo = calc_H_Frame_to_geo(lst, name, poly)
+        if H_F_to_geo is None:
             continue
-        H_geo_to_B = np.linalg.inv(H_B_to_geo)
-        H_B_to_A = np.matmul(H_geo_to_A, H_B_to_geo)
-        cpoint_inB = shapely_perspective(cpoint, H_geo_to_B)
-        nth_img, B_polygon = choiceImagePartInFrame(cpoint_inB, lst)
-        xmin, ymin, xmax, ymax, ratio = calcBox_inA(H_B_to_A, imgA_.shape, B_polygon, args.extRangeA)
+        H_geo_to_F = np.linalg.inv(H_F_to_geo)
+        H_F_to_A = np.matmul(H_geo_to_A, H_F_to_geo)
+        cpoint_inF = shapely_perspective(cpoint, H_geo_to_F)
+        nth_img, poly_B_in_F = choiceImagePartInFrame(cpoint_inF, lst)
+        xmin, ymin, xmax, ymax, ratio = calcBox_BinA(H_F_to_A, imgA_.shape, poly_B_in_F, args.extRangeA)
         print(xmin, xmax, ymin, ymax, ratio)
 
         cut_A = CropZoom2D(x0=xmin, x1=xmax, y0=ymin, y1=ymax, nz=1)
