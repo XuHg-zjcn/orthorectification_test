@@ -112,73 +112,72 @@ def parser_options():
     return opts
 
 
-# TODO: a,b 和 1,2 两种记号代表图片在代码中混用，需要进行统一
 if __name__ == '__main__':
     opts = parser_options()
-    opt_a = opts['imgA']
-    opt_b = opts['imgB']
+    opt_A = opts['imgA']
+    opt_B = opts['imgB']
     db = database.Database('data/imagery.db')
-    fid1, iid1 = import_img.import_img(db, opt_a['path'])
-    fid2, iid2 = import_img.import_img(db, opt_b['path'])
-    result_in_db = db.get_match(iid1, iid2)
+    fidA, iidA = import_img.import_img(db, opt_A['path'])
+    fidB, iidB = import_img.import_img(db, opt_B['path'])
+    result_in_db = db.get_match(iidA, iidB)
     if result_in_db is not None:
         print('found in database')
-        H, area_b_in_a_wkt = result_in_db
-        area_b_in_a = shapely.from_wkt(area_b_in_a_wkt)
+        H, area_B_in_A_wkt = result_in_db
+        area_B_in_A = shapely.from_wkt(area_B_in_A_wkt)
         print(H)
-        print(area_b_in_a.wkt)
+        print(area_B_in_A.wkt)
         if not opts['update_db']:
             exit()
 
     # TODO: 使用GDAL读取遥感影像
-    ds1 = gdal.Open(opt_a['path'], gdal.GA_ReadOnly)
-    ds2 = gdal.Open(opt_b['path'], gdal.GA_ReadOnly)
-    iv1 = ImgView(ds1.GetRasterBand(1))
-    iv2 = ImgView(ds2.GetRasterBand(1))
+    dsA = gdal.Open(opt_A['path'], gdal.GA_ReadOnly)
+    dsB = gdal.Open(opt_B['path'], gdal.GA_ReadOnly)
+    ivA = ImgView(dsA.GetRasterBand(1))
+    ivB = ImgView(dsB.GetRasterBand(1))
 
-    paraA = read_metadata(opt_a['path'])
-    paraB = read_metadata(opt_b['path'])
+    paraA = read_metadata(opt_A['path'])
+    paraB = read_metadata(opt_B['path'])
     hasMetadata = False
-    im = ImgMatch(iv1, iv2)
+    im = ImgMatch(ivA, ivB)
     if paraA is not None and paraB is not None:
         hasMetadata = True
         Hx = np.matmul(np.linalg.inv(paraA[1]), paraB[1])
         print('estimated perspective matrix by metadata:\n', Hx)  # 估计原图的透视矩阵
         bbox_at_coordA = perspective_boundingbox(
             Hx,
-            iv1.shape[1], iv1.shape[0],
-            iv2.shape[1], iv2.shape[0])
+            ivA.shape[1], ivA.shape[0],
+            ivB.shape[1], ivB.shape[0])
         print(bbox_at_coordA)
         bbox_at_coordB = perspective_boundingbox(
             np.linalg.inv(Hx),
-            iv2.shape[1], iv2.shape[0],
-            iv1.shape[1], iv1.shape[0])
+            ivB.shape[1], ivB.shape[0],
+            ivA.shape[1], ivA.shape[0])
         print(bbox_at_coordB)
 
-        cz1 = CropZoom2D.with_shape(iv1.shape,
+        czA = CropZoom2D.with_shape(ivA.shape,
             x0=bbox_at_coordA[0],y0=bbox_at_coordA[1],
             x1=bbox_at_coordA[2],y1=bbox_at_coordA[3])
-        cz2 = CropZoom2D.with_shape(iv2.shape,
+        czB = CropZoom2D.with_shape(ivB.shape,
             x0=bbox_at_coordB[0],y0=bbox_at_coordB[1],
             x1=bbox_at_coordB[2],y1=bbox_at_coordB[3])
-        im.set_estA(cz1)
-        im.set_estB(cz2)
+        im.set_estA(czA)
+        im.set_estB(czB)
 
-    im.setParam_preprocessA(maxpixel_out=opt_a['maxpixel_sift'],
-                            predown=opt_a['predown'],
-                            laplace=opt_a['laplace'],
-                            dilsize=opt_a['dilsize'],
-                            cutblack_topbottom=opt_a['cutblack_topbottom'],
-                            cutblack_leftright=opt_a['cutblack_leftright'])
-    im.setParam_preprocessB(maxpixel_out=opt_b['maxpixel_sift'],
-                            predown=opt_b['predown'],
-                            laplace=opt_b['laplace'],
-                            dilsize=opt_b['dilsize'],
-                            cutblack_topbottom=opt_b['cutblack_topbottom'],
-                            cutblack_leftright=opt_b['cutblack_leftright'])
+    im.setParam_preprocessA(maxpixel_out=opt_A['maxpixel_sift'],
+                            predown=opt_A['predown'],
+                            laplace=opt_A['laplace'],
+                            dilsize=opt_A['dilsize'],
+                            cutblack_topbottom=opt_A['cutblack_topbottom'],
+                            cutblack_leftright=opt_A['cutblack_leftright'])
+    im.setParam_preprocessB(maxpixel_out=opt_B['maxpixel_sift'],
+                            predown=opt_B['predown'],
+                            laplace=opt_B['laplace'],
+                            dilsize=opt_B['dilsize'],
+                            cutblack_topbottom=opt_B['cutblack_topbottom'],
+                            cutblack_leftright=opt_B['cutblack_leftright'])
     im.setParam_compare(outpath_match=opts['imgMatch'],
-                        maxpoints1=opt_a['maxpoint_sift'],
-                        maxpoints2=opt_b['maxpoint_sift'],
+                        maxpoints1=opt_A['maxpoint_sift'],
+                        maxpoints2=opt_B['maxpoint_sift'],
                         threshold_m1m2_ratio=opts['threshold_m1m2_ratio'])
     H_orig, n_match = im.match()
     if H_orig is None:
@@ -188,19 +187,19 @@ if __name__ == '__main__':
         print('too few match keypoint pairs')
         exit()
 
-    rect_a = shapely.box(0, 0, iv1.shape[1], iv1.shape[0])
-    rect_b = shapely.box(0, 0, iv2.shape[1], iv2.shape[0])
-    b_in_a = shapely_perspective(rect_b, H_orig)
+    rect_A = shapely.box(0, 0, ivA.shape[1], ivA.shape[0])
+    rect_B = shapely.box(0, 0, ivB.shape[1], ivB.shape[0])
+    B_in_A = shapely_perspective(rect_B, H_orig)
 
     if opts['addto_db']:
         # TODO: 检查数据库里是否已存在，避免UNIQUE约束错误
         if result_in_db is None:
-            db.insert_match(iid1, iid2, H_orig, b_in_a.wkt)
+            db.insert_match(iidA, iidB, H_orig, B_in_A.wkt)
         else:
-            db.update_match(iid1, iid2, H_orig, b_in_a.wkt)
+            db.update_match(iidA, iidB, H_orig, B_in_A.wkt)
         db.commit()
         db.close()
 
     # TODO: 修复create_rb3dview实现
     #if opts['img3D'] is not None:
-    #    create_rb3dview(img1[:32766, :32766], img2[:32766,:32766], H_orig, opts['img3D']) #32766是由于SHRT_MAX限制
+    #    create_rb3dview(imgA[:32766, :32766], imgB[:32766,:32766], H_orig, opts['img3D']) #32766是由于SHRT_MAX限制

@@ -30,18 +30,18 @@ def perspective_boundingbox(H, widthA, heightA, widthB, heightB):
                         [widthB, 0, 1]])
     conrerB_at_coordA = np.matmul(H, conrerB.transpose())
     conrerB_at_coordA /= conrerB_at_coordA[-1]
-    xmin_a = 0
-    xMax_a = widthA
-    ymin_a = 0
-    yMax_a = heightA
-    xmin_b = np.min(conrerB_at_coordA[0])
-    xMax_b = np.max(conrerB_at_coordA[0])
-    ymin_b = np.min(conrerB_at_coordA[1])
-    yMax_b = np.max(conrerB_at_coordA[1])
-    xmin = max(xmin_a, xmin_b)
-    xMax = min(xMax_a, xMax_b)
-    ymin = max(ymin_a, ymin_b)
-    yMax = min(yMax_a, yMax_b)
+    xmin_A = 0
+    xMax_A = widthA
+    ymin_A = 0
+    yMax_A = heightA
+    xmin_B = np.min(conrerB_at_coordA[0])
+    xMax_B = np.max(conrerB_at_coordA[0])
+    ymin_B = np.min(conrerB_at_coordA[1])
+    yMax_B = np.max(conrerB_at_coordA[1])
+    xmin = max(xmin_A, xmin_B)
+    xMax = min(xMax_A, xMax_B)
+    ymin = max(ymin_A, ymin_B)
+    yMax = min(yMax_A, yMax_B)
     return int(xmin), int(ymin), int(xMax), int(yMax)
 
 # axis=0 for top and bottom for axis=1 for left and right
