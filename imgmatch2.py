@@ -30,14 +30,14 @@ class ImgMatch:
         self.ppA = None   # 预处理参数(Preprocess Param)
         self.ppB = None
         self.cp = None    # 对比参数(Compare Param)
-        self.estA = None  # 估计区域
-        self.estB = None
+        self.cutA = None  # 估计区域
+        self.cutB = None
 
-    def set_estA(self, estA):
-        self.estA = estA
+    def set_cutA(self, cutA):
+        self.cutA = cutA
 
-    def set_estB(self, estB):
-        self.estB = estB
+    def set_cutB(self, cutB):
+        self.cutB = cutB
 
     def setParam_preprocessA_empty(self):
         self.ppA = ([], {})
@@ -55,19 +55,19 @@ class ImgMatch:
         self.cp = (args, kwargs)
 
     def match(self):
-        def preprocess_and_transfrom(imgX, estX, ppX, name):
-            estX = estX if estX is not None else CropZoom2D.with_shape(imgX.shape)
+        def preprocess_and_transfrom(imgX, cutX, ppX, name):
+            cutX = cutX if cutX is not None else CropZoom2D.with_shape(imgX.shape)
             if isinstance(imgX, ImgView):
-                imgX = imgX[estX]
+                imgX = imgX[cutX]
             elif isinstance(imgX, np.ndarray):
-                imgX = imgX[estX.to_slice()]
+                imgX = imgX[cutX.to_slice()]
             imgX_, nX, xyX = preprocess(imgX, name, *ppX[0], **ppX[1])
             czpX = CropZoom2D(x0=xyX[0], y0=xyX[1], nz=nX, wo=imgX_.shape[1], ho=imgX_.shape[0])
-            czoX = estX.fog(czpX)
+            czoX = cutX.fog(czpX)
             return imgX_, czoX
         # TODO: 暂存预处理后的数据
-        imgA_, czoA = preprocess_and_transfrom(self.imgA, self.estA, self.ppA, 'imgA')
-        imgB_, czoB = preprocess_and_transfrom(self.imgB, self.estB, self.ppB, 'imgB')
+        imgA_, czoA = preprocess_and_transfrom(self.imgA, self.cutA, self.ppA, 'imgA')
+        imgB_, czoB = preprocess_and_transfrom(self.imgB, self.cutB, self.ppB, 'imgB')
         H_, matchs = compare(imgA_, imgB_, *self.cp[0], **self.cp[1])
         if H_ is None:
             return None, 0

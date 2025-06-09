@@ -72,7 +72,7 @@ def compare_to(
     dsB = gdal.Open(pathB, gdal.GA_ReadOnly)
     ivB = ImgView(dsB.GetRasterBand(1))
     im = ImgMatch(imgA_, ivB)
-    im.set_estA(cut_A)
+    im.set_cutA(cut_A)
     im.setParam_preprocessA_empty()
     im.setParam_preprocessB(
         maxpixel_out=None,

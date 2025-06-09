@@ -159,8 +159,8 @@ if __name__ == '__main__':
         czB = CropZoom2D.with_shape(ivB.shape,
             x0=bbox_at_coordB[0],y0=bbox_at_coordB[1],
             x1=bbox_at_coordB[2],y1=bbox_at_coordB[3])
-        im.set_estA(czA)
-        im.set_estB(czB)
+        im.set_cutA(czA)
+        im.set_cutB(czB)
 
     im.setParam_preprocessA(maxpixel_out=opt_A['maxpixel_sift'],
                             predown=opt_A['predown'],

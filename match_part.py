@@ -59,8 +59,8 @@ if __name__ == '__main__':
             dsB = gdal.Open(pathB, gdal.GA_ReadOnly)
             ivB = ImgView(dsB.GetRasterBand(1))
             im = ImgMatch(ivA, ivB)
-            im.set_estA(CropZoom2D.with_shape(ivA.shape)[::2, -3000::2])
-            im.set_estB(CropZoom2D.with_shape(ivB.shape)[::2, :3000:2])
+            im.set_cutA(CropZoom2D.with_shape(ivA.shape)[::2, -3000::2])
+            im.set_cutB(CropZoom2D.with_shape(ivB.shape)[::2, :3000:2])
             im.setParam_preprocessA()
             im.setParam_preprocessB()
             im.setParam_compare(outpath_match=f'data/match_{iidA}_{iidB}.jpg',
