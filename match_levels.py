@@ -29,6 +29,7 @@ import database
 import import_img
 from common import shapely_perspective, findPerspective, try_func, CropZoom2D
 from preprocess_single import preprocess
+from imgmatch import H_transpose
 from imgmatch2 import ImgMatch
 from imgview import ImgView
 
@@ -172,14 +173,19 @@ def match_other_oneway(db, imgA_, H_B_to_Ap, iB, lst, irange, **kwargs):
         print(nameD, n_match)
         if H_D_to_Ap is None:
             break
+        else:
+            yield iidD, H_D_to_Ap, n_match
         iC = iD
         H_C_to_Ap = H_D_to_Ap
 
 def match_other(db, imgA_, H_B_to_Ap, iB, lst, **kwargs):
+    # TODO: 按照现有的变换矩阵（粗略）重新匹配一遍并yield
     print('match other forward')
-    match_other_oneway(db, imgA_, H_B_to_Ap, iB, lst, range(iB+1, len(lst)), **kwargs)
+    for res in match_other_oneway(db, imgA_, H_B_to_Ap, iB, lst, range(iB+1, len(lst)), **kwargs):
+        yield res
     print('match other backward')
-    match_other_oneway(db, imgA_, H_B_to_Ap, iB, lst, range(iB-1, -1, -1), **kwargs)
+    for res in match_other_oneway(db, imgA_, H_B_to_Ap, iB, lst, range(iB-1, -1, -1), **kwargs):
+        yield res
 
 
 # 目前只支持KH-9低分辨率相机和高分辨率相机的影像匹配
@@ -197,8 +203,8 @@ if __name__ == '__main__':
     args = parser.parse_args()
     db = database.Database('data/imagery.db')
     pathA = args.imgA[0]
-    fid, iid = import_img.import_img(db, pathA)
-    geom = shapely.from_wkt(db.get_frame_geom(fid))
+    fidA, iidA = import_img.import_img(db, pathA)
+    geom = shapely.from_wkt(db.get_frame_geom(fidA))
     coord_nw, coord_ne, coord_sw, coord_se = get_corners_coord(geom)
     print(coord_nw, coord_ne, coord_sw, coord_se)
 
@@ -219,7 +225,7 @@ if __name__ == '__main__':
                                 coord_ne, coord_se, coord_sw, coord_nw)
     H_geo_to_A = np.linalg.inv(H_A_to_geo)
 
-    for fid, name, poly, cpoint in db.get_intersect(fid):
+    for fid, name, poly, cpoint in db.get_intersect(fidA):
         lst = db.get_splited_image(fid)
         H_F_to_geo = calc_H_Frame_to_geo(lst, name, poly)
         if H_F_to_geo is None:
@@ -231,6 +237,8 @@ if __name__ == '__main__':
         cut_A, ratio = calcBox_BinA(H_F_to_A, imgA_.shape, poly_B_in_F, args.extRangeA)
         print(cut_A, ratio)
 
+        H_B_to_Ap = None
+        iB = None
         for i in plusminus(len(lst), nth_img, args.plusminus, args.plusminus):
             pathB = lst[i][1].split('\n')[0]
             retval = try_func(compare_to, imgA_, cut_A, pathB, os.path.basename(pathB), ratio,
@@ -242,8 +250,16 @@ if __name__ == '__main__':
             H_B_to_Ap, n_match = retval
             if n_match < args.minmatch:
                 continue
-            match_other(db, imgA_, H_B_to_Ap, i, lst)
+            iB = i
             break
             print('--------------------------')
-        # TODO: 匹配结果添加到数据库
+        if H_B_to_Ap is None:
+            continue
+        for iidD, H_D_to_Ap, n_match in match_other(db, imgA_, H_B_to_Ap, iB, lst):
+            if n_match < args.minmatch:
+                continue
+            H_D_to_A = H_transpose(H_D_to_Ap, x0_d=xyA[0], y0_d=xyA[1], zoom_d=nA)
+            db.insert_match(iidA, iidD, H_D_to_A, None)
+            db.commit()
         print('==========================')
+    db.close()
