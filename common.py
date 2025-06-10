@@ -144,6 +144,9 @@ class CropZoom2D:
                  xc=None, yc=None,
                  wi=None, hi=None,
                  wo=None, ho=None):
+        if isinstance(x0, CropZoom2D):
+            self.x = x0.x
+            self.y = x0.y
         if isinstance(x0, CropZoom1D):
             self.x = x0
         else:

@@ -23,7 +23,7 @@ import cv2
 from osgeo import gdal
 import numpy as np
 import shapely
-from preprocess_single import preprocess, perspective_boundingbox
+import preprocess
 from metadata import read_metadata
 from imgmatch import H_transpose, compare, create_rb3dview
 import database
@@ -142,12 +142,12 @@ if __name__ == '__main__':
         hasMetadata = True
         Hx = np.matmul(np.linalg.inv(paraA[1]), paraB[1])
         print('estimated perspective matrix by metadata:\n', Hx)  # 估计原图的透视矩阵
-        bbox_at_coordA = perspective_boundingbox(
+        bbox_at_coordA = preprocess.perspective_boundingbox(
             Hx,
             ivA.shape[1], ivA.shape[0],
             ivB.shape[1], ivB.shape[0])
         print(bbox_at_coordA)
-        bbox_at_coordB = perspective_boundingbox(
+        bbox_at_coordB = preprocess.perspective_boundingbox(
             np.linalg.inv(Hx),
             ivB.shape[1], ivB.shape[0],
             ivA.shape[1], ivA.shape[0])
@@ -159,21 +159,30 @@ if __name__ == '__main__':
         czB = CropZoom2D.with_shape(ivB.shape,
             x0=bbox_at_coordB[0],y0=bbox_at_coordB[1],
             x1=bbox_at_coordB[2],y1=bbox_at_coordB[3])
-        im.set_cutA(czA)
-        im.set_cutB(czB)
+        im.append_preprocessA(functools.partial(preprocess.cut, cz2d=czA))
+        im.append_preprocessB(functools.partial(preprocess.cut, cz2d=czB))
 
-    im.setParam_preprocessA(maxpixel_out=opt_A['maxpixel_sift'],
-                            predown=opt_A['predown'],
-                            laplace=opt_A['laplace'],
-                            dilsize=opt_A['dilsize'],
-                            cutblack_topbottom=opt_A['cutblack_topbottom'],
-                            cutblack_leftright=opt_A['cutblack_leftright'])
-    im.setParam_preprocessB(maxpixel_out=opt_B['maxpixel_sift'],
-                            predown=opt_B['predown'],
-                            laplace=opt_B['laplace'],
-                            dilsize=opt_B['dilsize'],
-                            cutblack_topbottom=opt_B['cutblack_topbottom'],
-                            cutblack_leftright=opt_B['cutblack_leftright'])
+    maxpixelA = opt_A['maxpixel_sift']
+    if opt_A['laplace']:
+        maxpixelA *= opt_A['dilsize']**2
+    im.append_preprocessA(functools.partial(preprocess.auto_zoom, maxpixel=maxpixelA))
+    if opt_A['laplace']:
+        im.append_preprocessA(functools.partial(preprocess.laplacian_and_dilate, nz=opt_A['dilsize']))
+    if opt_A['cutblack_topbottom']:
+        im.append_preprocessA(functools.partial(preprocess.cutblack_topbottom, name='imgA'))
+    if opt_A['cutblack_leftright']:
+        im.append_preprocessA(functools.partial(preprocess.cutblack_leftright, name='imgA'))
+
+    maxpixelB = opt_B['maxpixel_sift']
+    if opt_B['laplace']:
+        maxpixelB *= opt_B['dilsize']**2
+    im.append_preprocessB(functools.partial(preprocess.auto_zoom, maxpixel=maxpixelB))
+    if opt_B['laplace']:
+        im.append_preprocessB(functools.partial(preprocess.laplacian_and_dilate, nz=opt_B['dilsize']))
+    if opt_B['cutblack_topbottom']:
+        im.append_preprocessB(functools.partial(preprocess.cutblack_topbottom, name='imgB'))
+    if opt_B['cutblack_leftright']:
+        im.append_preprocessB(functools.partial(preprocess.cutblack_leftright, name='imgB'))
     im.setParam_compare(outpath_match=opts['imgMatch'],
                         maxpoints1=opt_A['maxpoint_sift'],
                         maxpoints2=opt_B['maxpoint_sift'],

@@ -28,7 +28,7 @@ import shapely
 import database
 import import_img
 from common import shapely_perspective, findPerspective, try_func, CropZoom2D
-from preprocess_single import preprocess
+import preprocess
 from imgmatch import H_transpose
 from imgmatch2 import ImgMatch
 from imgview import ImgView
@@ -72,15 +72,11 @@ def compare_to(
     dsB = gdal.Open(pathB, gdal.GA_ReadOnly)
     ivB = ImgView(dsB.GetRasterBand(1))
     im = ImgMatch(imgA_, ivB)
-    im.set_cutA(cut_A)
-    im.setParam_preprocessA_empty()
-    im.setParam_preprocessB(
-        maxpixel_out=None,
-        predown=round(ratio/8),
-        laplace=True,
-        dilsize=8,
-        cutblack_topbottom=True,
-        cutblack_leftright=True)
+    im.append_preprocessA(functools.partial(preprocess.cut, cz2d=cut_A))
+    im.append_preprocessB(functools.partial(preprocess.auto_zoom, predown=round(ratio/8)))
+    im.append_preprocessB(functools.partial(preprocess.laplacian_and_dilate, nz=8))
+    im.append_preprocessB(functools.partial(preprocess.cutblack_topbottom, name='imgB'))
+    im.append_preprocessB(functools.partial(preprocess.cutblack_leftright, name='imgB'))
     im.setParam_compare(
         outpath_match=f'data/match_levels_{name}.jpg',
         maxpoints1=maxpointA,
@@ -210,13 +206,13 @@ if __name__ == '__main__':
 
     dsA = gdal.Open(pathA, gdal.GA_ReadOnly)
     ivA = ImgView(dsA.GetRasterBand(1))
-    imgA_, nA, xyA = preprocess(ivA, 'imgA',
-                                maxpixel_out=None,
-                                predown=args.predownA,
-                                laplace=True,
-                                dilsize=8,
-                                cutblack_topbottom=True,
-                                cutblack_leftright=True)
+    imgA_, tA = preprocess.auto_zoom(ivA, predown=args.predownA)
+    imgA_, t_ = preprocess.cutblack_topbottom(imgA_, name='imgA')
+    tA = tA.fog(t_)
+    imgA_, t_ = preprocess.cutblack_leftright(imgA_, name='imgA')
+    tA = tA.fog(t_)
+    imgA_, t_ = preprocess.laplacian_and_dilate(imgA_, nz=8)
+    tA = tA.fog(t_)
 
     print('ivA.shape', ivA.shape)
     print('imgA_.shape', imgA_.shape)
@@ -238,7 +234,7 @@ if __name__ == '__main__':
         print(cut_A, ratio)
 
         H_B_to_Ap = None
-        iB = None
+        iB = None  # iB是F中选中的分幅序号
         for i in plusminus(len(lst), nth_img, args.plusminus, args.plusminus):
             pathB = lst[i][1].split('\n')[0]
             retval = try_func(compare_to, imgA_, cut_A, pathB, os.path.basename(pathB), ratio,
@@ -253,12 +249,12 @@ if __name__ == '__main__':
             iB = i
             break
             print('--------------------------')
-        if H_B_to_Ap is None:
+        if iB is None or H_B_to_Ap is None:
             continue
         for iidD, H_D_to_Ap, n_match in match_other(db, imgA_, H_B_to_Ap, iB, lst):
             if n_match < args.minmatch:
                 continue
-            H_D_to_A = H_transpose(H_D_to_Ap, x0_d=xyA[0], y0_d=xyA[1], zoom_d=nA)
+            H_D_to_A = H_transpose(H_D_to_Ap, x0_d=tA.x0, y0_d=tA.y0, zoom_d=tA.nz)
             db.insert_match(iidA, iidD, H_D_to_A, None)
             db.commit()
         print('==========================')

@@ -17,64 +17,52 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #############################################################################
 import numpy as np
-from preprocess_single import preprocess
 from imgview import ImgView
 from imgmatch import compare, H_transpose
 from common import CropZoom2D
+from transform import KeepTransform
 
 
 class ImgMatch:
     def __init__(self, imgA, imgB):
         self.imgA = imgA  # imgA, imgB可以是np.ndarray或ImgView类型
         self.imgB = imgB
-        self.ppA = None   # 预处理参数(Preprocess Param)
-        self.ppB = None
+        self.pflA = []    # 预处理函数列表(Preprocess Function List)
+        self.pflB = []
+        self.pflC = []
         self.cp = None    # 对比参数(Compare Param)
-        self.cutA = None  # 估计区域
-        self.cutB = None
 
-    def set_cutA(self, cutA):
-        self.cutA = cutA
+    def append_preprocessA(self, x):
+        self.pflA.append(x)
 
-    def set_cutB(self, cutB):
-        self.cutB = cutB
+    def append_preprocessB(self, x):
+        self.pflB.append(x)
 
-    def setParam_preprocessA_empty(self):
-        self.ppA = ([], {})
-
-    def setParam_preprocessB_empty(self):
-        self.ppB = ([], {})
-
-    def setParam_preprocessA(self, *args, **kwargs):
-        self.ppA = (args, kwargs)
-
-    def setParam_preprocessB(self, *args, **kwargs):
-        self.ppB = (args, kwargs)
+    def append_preprocessC(self, x):
+        self.pflC.append(x)
 
     def setParam_compare(self, *args, **kwargs):
         self.cp = (args, kwargs)
 
     def match(self):
-        def preprocess_and_transfrom(imgX, cutX, ppX, name):
-            cutX = cutX if cutX is not None else CropZoom2D.with_shape(imgX.shape)
-            if isinstance(imgX, ImgView):
-                imgX = imgX[cutX]
-            elif isinstance(imgX, np.ndarray):
-                imgX = imgX[cutX.to_slice()]
-            imgX_, nX, xyX = preprocess(imgX, name, *ppX[0], **ppX[1])
-            czpX = CropZoom2D(x0=xyX[0], y0=xyX[1], nz=nX, wo=imgX_.shape[1], ho=imgX_.shape[0])
-            czoX = cutX.fog(czpX)
-            return imgX_, czoX
+        def preprocess_and_transform(img, ppX):
+            t = KeepTransform()
+            for func_p in ppX:
+                img, t_ = func_p(img)
+                t = t.fog(t_)
+            return img, t
         # TODO: 暂存预处理后的数据
-        imgA_, czoA = preprocess_and_transfrom(self.imgA, self.cutA, self.ppA, 'imgA')
-        imgB_, czoB = preprocess_and_transfrom(self.imgB, self.cutB, self.ppB, 'imgB')
+        imgA_, tA = preprocess_and_transform(self.imgA, self.pflA)
+        imgB_, tB = preprocess_and_transform(self.imgB, self.pflB)
+        for func_p in self.pflC:
+            imgA, imgB, tA, tB = func_p(imgA, imgB, tA, tB)
         H_, matchs = compare(imgA_, imgB_, *self.cp[0], **self.cp[1])
         if H_ is None:
             return None, 0
         H = H_transpose(
             H_,
-            x0_d=czoA.x0, y0_d=czoA.y0, zoom_d=czoA.nz,
-            x0_s=czoB.x0, y0_s=czoB.y0, zoom_s=czoB.nz
+            x0_d=tA.x0, y0_d=tA.y0, zoom_d=tA.nz,
+            x0_s=tB.x0, y0_s=tB.y0, zoom_s=tB.nz
         )
         # TODO: 更进一步，使用高分辨率的图像分块处理，进行更高精度的对齐
         # TODO: 在此处生成B_in_A的shapely.Polygon对象
