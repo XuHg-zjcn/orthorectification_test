@@ -114,6 +114,18 @@ class KeepTransform(Transform):
     def __repr__(self):
         return 'KeepTransform()'
 
+    @property
+    def x0(self):
+        return 0
+
+    @property
+    def y0(self):
+        return 0
+
+    @property
+    def nz(self):
+        return 1
+
 
 class MoveZoomTransform(Transform):  # 平移缩放变换
     def __init__(self, x0=0, y0=0, nz=1):

@@ -18,7 +18,6 @@
 #############################################################################
 import sys
 import os
-import functools
 import bisect
 import argparse
 import numpy as np
@@ -72,11 +71,11 @@ def compare_to(
     dsB = gdal.Open(pathB, gdal.GA_ReadOnly)
     ivB = ImgView(dsB.GetRasterBand(1))
     im = ImgMatch(imgA_, ivB)
-    im.append_preprocessA(functools.partial(preprocess.cut, cz2d=cut_A))
-    im.append_preprocessB(functools.partial(preprocess.auto_zoom, predown=round(ratio/8)))
-    im.append_preprocessB(functools.partial(preprocess.laplacian_and_dilate, nz=8))
-    im.append_preprocessB(functools.partial(preprocess.cutblack_topbottom, name='imgB'))
-    im.append_preprocessB(functools.partial(preprocess.cutblack_leftright, name='imgB'))
+    im.append_pobj(preprocess.CutImg('A', cz2d=cut_A))
+    im.append_pobj(preprocess.AutoZoom('B', predown=round(ratio/8)))
+    im.append_pobj(preprocess.LaplacianAndDilate('B', nz=8))
+    im.append_pobj(preprocess.CutBlackTopBottom('B'))
+    im.append_pobj(preprocess.CutBlackLeftRight('B'))
     im.setParam_compare(
         outpath_match=f'data/match_levels_{name}.jpg',
         maxpoints1=maxpointA,
@@ -206,12 +205,12 @@ if __name__ == '__main__':
 
     dsA = gdal.Open(pathA, gdal.GA_ReadOnly)
     ivA = ImgView(dsA.GetRasterBand(1))
-    imgA_, tA = preprocess.auto_zoom(ivA, predown=args.predownA)
-    imgA_, t_ = preprocess.cutblack_topbottom(imgA_, name='imgA')
+    imgA_, tA = preprocess.AutoZoom('A', predown=args.predownA).process_img(ivA)
+    imgA_, t_ = preprocess.CutBlackTopBottom('A').process_img(imgA_)
     tA = tA.fog(t_)
-    imgA_, t_ = preprocess.cutblack_leftright(imgA_, name='imgA')
+    imgA_, t_ = preprocess.CutBlackLeftRight('A').process_img(imgA_)
     tA = tA.fog(t_)
-    imgA_, t_ = preprocess.laplacian_and_dilate(imgA_, nz=8)
+    imgA_, t_ = preprocess.LaplacianAndDilate('A', nz=8).process_img(imgA_)
     tA = tA.fog(t_)
 
     print('ivA.shape', ivA.shape)

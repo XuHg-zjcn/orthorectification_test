@@ -18,7 +18,6 @@
 #############################################################################
 import sys
 import getopt
-import functools
 import cv2
 from osgeo import gdal
 import numpy as np
@@ -159,30 +158,30 @@ if __name__ == '__main__':
         czB = CropZoom2D.with_shape(ivB.shape,
             x0=bbox_at_coordB[0],y0=bbox_at_coordB[1],
             x1=bbox_at_coordB[2],y1=bbox_at_coordB[3])
-        im.append_preprocessA(functools.partial(preprocess.cut, cz2d=czA))
-        im.append_preprocessB(functools.partial(preprocess.cut, cz2d=czB))
+        im.append_pobj(preprocess.CutImg('A', czA))
+        im.append_pobj(preprocess.CutImg('B', czB))
 
     maxpixelA = opt_A['maxpixel_sift']
     if opt_A['laplace']:
         maxpixelA *= opt_A['dilsize']**2
-    im.append_preprocessA(functools.partial(preprocess.auto_zoom, maxpixel=maxpixelA))
+    im.append_pobj(preprocess.AutoZoom('A', maxpixel=maxpixelA))
     if opt_A['laplace']:
-        im.append_preprocessA(functools.partial(preprocess.laplacian_and_dilate, nz=opt_A['dilsize']))
+        im.append_pobj(preprocess.LaplacianAndDilate('A', nz=opt_A['dilsize']))
     if opt_A['cutblack_topbottom']:
-        im.append_preprocessA(functools.partial(preprocess.cutblack_topbottom, name='imgA'))
+        im.append_pobj(preprocess.CutBlackTopBottom('A'))
     if opt_A['cutblack_leftright']:
-        im.append_preprocessA(functools.partial(preprocess.cutblack_leftright, name='imgA'))
+        im.append_pobj(preprocess.CutBlackLeftRight('A'))
 
     maxpixelB = opt_B['maxpixel_sift']
     if opt_B['laplace']:
         maxpixelB *= opt_B['dilsize']**2
-    im.append_preprocessB(functools.partial(preprocess.auto_zoom, maxpixel=maxpixelB))
+    im.append_pobj(preprocess.AutoZoom('B', maxpixel=maxpixelB))
     if opt_B['laplace']:
-        im.append_preprocessB(functools.partial(preprocess.laplacian_and_dilate, nz=opt_B['dilsize']))
+        im.append_pobj(preprocess.LaplacianAndDilate('B', nz=opt_B['dilsize']))
     if opt_B['cutblack_topbottom']:
-        im.append_preprocessB(functools.partial(preprocess.cutblack_topbottom, name='imgB'))
+        im.append_pobj(preprocess.CutBlackTopBottom('B'))
     if opt_B['cutblack_leftright']:
-        im.append_preprocessB(functools.partial(preprocess.cutblack_leftright, name='imgB'))
+        im.append_pobj(preprocess.CutBlackLeftRight('B'))
     im.setParam_compare(outpath_match=opts['imgMatch'],
                         maxpoints1=opt_A['maxpoint_sift'],
                         maxpoints2=opt_B['maxpoint_sift'],

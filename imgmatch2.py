@@ -27,35 +27,27 @@ class ImgMatch:
     def __init__(self, imgA, imgB):
         self.imgA = imgA  # imgA, imgB可以是np.ndarray或ImgView类型
         self.imgB = imgB
-        self.pflA = []    # 预处理函数列表(Preprocess Function List)
-        self.pflB = []
-        self.pflC = []
+        self.pol = []     # 预处理对象列表(Preprocess Object List)
         self.cp = None    # 对比参数(Compare Param)
 
-    def append_preprocessA(self, x):
-        self.pflA.append(x)
-
-    def append_preprocessB(self, x):
-        self.pflB.append(x)
-
-    def append_preprocessC(self, x):
-        self.pflC.append(x)
+    def append_pobj(self, x):
+        self.pol.append(x)
 
     def setParam_compare(self, *args, **kwargs):
         self.cp = (args, kwargs)
 
     def match(self):
-        def preprocess_and_transform(img, ppX):
-            t = KeepTransform()
-            for func_p in ppX:
-                img, t_ = func_p(img)
-                t = t.fog(t_)
-            return img, t
         # TODO: 暂存预处理后的数据
-        imgA_, tA = preprocess_and_transform(self.imgA, self.pflA)
-        imgB_, tB = preprocess_and_transform(self.imgB, self.pflB)
-        for func_p in self.pflC:
-            imgA, imgB, tA, tB = func_p(imgA, imgB, tA, tB)
+        dict_ = {'imgA':self.imgA,
+                 'imgB':self.imgB,
+                 'tA':KeepTransform(),
+                 'tB':KeepTransform()}
+        for pobj in self.pol:
+            dict_ = pobj.process(dict_)
+        imgA_ = dict_['imgA']
+        imgB_ = dict_['imgB']
+        tA = dict_['tA']
+        tB = dict_['tB']
         H_, matchs = compare(imgA_, imgB_, *self.cp[0], **self.cp[1])
         if H_ is None:
             return None, 0

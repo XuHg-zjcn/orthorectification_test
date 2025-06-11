@@ -17,7 +17,6 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #############################################################################
 import sys
-import functools
 import numpy as np
 from osgeo import gdal
 import database
@@ -60,22 +59,12 @@ if __name__ == '__main__':
             dsB = gdal.Open(pathB, gdal.GA_ReadOnly)
             ivB = ImgView(dsB.GetRasterBand(1))
             im = ImgMatch(ivA, ivB)
-            im.append_preprocessA(
-                functools.partial(
-                    preprocess.cut,
-                    cz2d=CropZoom2D.with_shape(ivA.shape)[::2, -3000::2]))
-            im.append_preprocessA(
-                functools.partial(
-                    preprocess.auto_zoom,
-                    predown=1))
-            im.append_preprocessB(
-                functools.partial(
-                    preprocess.cut,
-                    cz2d=CropZoom2D.with_shape(ivB.shape)[::2, :3000:2]))
-            im.append_preprocessB(
-                functools.partial(
-                    preprocess.auto_zoom,
-                    predown=1))
+            czA = CropZoom2D.with_shape(ivA.shape)[::2, -3000::2]
+            czB = CropZoom2D.with_shape(ivB.shape)[::2, :3000:2]
+            im.append_pobj(preprocess.CutImg('A', czA))
+            im.append_pobj(preprocess.AutoZoom('A', predown=1))
+            im.append_pobj(preprocess.CutImg('B', czB))
+            im.append_pobj(preprocess.AutoZoom('B',predown=1))
             im.setParam_compare(outpath_match=f'data/match_{iidA}_{iidB}.jpg',
                                 maxpoints1=5000, maxpoints2=5000,
                                 threshold_m1m2_ratio=0.8)

@@ -21,9 +21,32 @@ from abc import ABC, abstractmethod
 import numpy as np
 import cv2
 from imgview import ImgView
-from transform import MoveZoomTransform
+from transform import KeepTransform, MoveZoomTransform
 
-# TODO: 将预处理封装成类，参数作为属性储存
+
+class Preprocess:
+    def process(self, dict_):
+        return dict_
+
+
+class PreprocessSingle(Preprocess):
+    def __init__(self, imgname):
+        self.imgname = imgname
+
+    def process(self, dict_):
+        if self.imgname not in {'A', 'B'}:
+            raise ValueError(f'invaild imgname {self.imgname}')
+        s_imgX = 'img'+self.imgname
+        s_tX = 't'+self.imgname
+        imgX, t_ = self.process_img(dict_[s_imgX])
+        tX = dict_[s_tX].fog(t_)
+        dict_[s_imgX] = imgX
+        dict_[s_tX] = tX
+        return dict_
+
+    def process_img(self, img):
+        return img, KeepTransform()
+
 
 # 计算图像B透视投影到图像A中与图像A的交集在图像A的坐标系下的包围框
 def perspective_boundingbox(H, widthA, heightA, widthB, heightB):
@@ -93,33 +116,61 @@ def _auto_zoom(img, maxpixel=1e6, predown=None):
     else:
         raise TypeError(f'unknown type {type(img)}')
 
-def cut(img, cz2d):
-    return img[cz2d.to_slice()], MoveZoomTransform(x0=cz2d.x0, y0=cz2d.y0, nz=cz2d.nz)
 
-def auto_zoom(img, *args, **kwargs):
-    img, n = _auto_zoom(img, *args, **kwargs)
-    mt = MoveZoomTransform(nz=n)
-    return img, mt
+class CutImg(PreprocessSingle):
+    def __init__(self, imgname, cz2d):
+        super().__init__(imgname)
+        self.cz2d = cz2d
 
-def laplacian_and_dilate(img, nz=8):
-    kern = cv2.getStructuringElement(cv2.MORPH_ELLIPSE if nz >= 5 else cv2.MORPH_RECT, (nz, nz))
-    img = cv2.Laplacian(img, cv2.CV_8U)
-    img = cv2.dilate(img, kern)
-    img = cv2.resize(img, None, None, 1.0/nz, 1.0/nz, cv2.INTER_AREA)
-    return img, MoveZoomTransform(nz=nz)
+    def process_img(self, img):
+        img = img[self.cz2d.to_slice()]
+        mt = MoveZoomTransform(x0=self.cz2d.x0, y0=self.cz2d.y0, nz=self.cz2d.nz)
+        return img, mt
 
-def cutblack_topbottom(img, name=''):
-    height_in = img.shape[0]
-    t, b = detect_edge_black(img, axis=0)
-    img = img[t:b+1]
-    percent = (height_in-(b-t+1))/height_in
-    print(f'{name} cropoff black edge top-bottom in x:[{t},{b+1}), drop {percent:.2%}')
-    return img, MoveZoomTransform(y0=t)
 
-def cutblack_leftright(img, name=''):
-    width_in = img.shape[1]
-    l, r = detect_edge_black(img, axis=1)
-    img = img[:, l:r+1]
-    percent = (width_in-(r-l+1))/width_in
-    print(f'{name} cropoff black edge left-right in y:[{l},{r+1}), drop {percent:.2%}')
-    return img, MoveZoomTransform(x0=l)
+class AutoZoom(PreprocessSingle):
+    def __init__(self, imgname, maxpixel=1e6, predown=None):
+        super().__init__(imgname)
+        self.maxpixel = maxpixel
+        self.predown = predown
+
+    def process_img(self, img):
+        img, n = _auto_zoom(img, self.maxpixel, self.predown)
+        mt = MoveZoomTransform(nz=n)
+        return img, mt
+
+
+class LaplacianAndDilate(PreprocessSingle):
+    def __init__(self, imgname, nz=8):
+        super().__init__(imgname)
+        self.nz = nz
+
+    def process_img(self, img):
+        kern = cv2.getStructuringElement(
+            cv2.MORPH_ELLIPSE if self.nz >= 5 else cv2.MORPH_RECT, (self.nz, self.nz))
+        img = cv2.Laplacian(img, cv2.CV_8U)
+        img = cv2.dilate(img, kern)
+        img = cv2.resize(img, None, None, 1.0/self.nz, 1.0/self.nz, cv2.INTER_AREA)
+        return img, MoveZoomTransform(nz=self.nz)
+
+
+class CutBlackTopBottom(PreprocessSingle):
+    def process_img(self, img):
+        height_in = img.shape[0]
+        t, b = detect_edge_black(img, axis=0)
+        img = img[t:b+1]
+        percent = (height_in-(b-t+1))/height_in
+        name = 'img'+self.imgname
+        print(f'{name} cropoff black edge top-bottom in x:[{t},{b+1}), drop {percent:.2%}')
+        return img, MoveZoomTransform(y0=t)
+
+
+class CutBlackLeftRight(PreprocessSingle):
+    def process_img(self, img):
+        width_in = img.shape[1]
+        l, r = detect_edge_black(img, axis=1)
+        img = img[:, l:r+1]
+        percent = (width_in-(r-l+1))/width_in
+        name = 'img'+self.imgname
+        print(f'{name} cropoff black edge left-right in y:[{l},{r+1}), drop {percent:.2%}')
+        return img, MoveZoomTransform(x0=l)
