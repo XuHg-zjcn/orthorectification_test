@@ -20,8 +20,10 @@ import math
 from abc import ABC, abstractmethod
 import numpy as np
 import cv2
+import shapely
 from imgview import ImgView
 from transform import KeepTransform, MoveZoomTransform
+from common import CropZoom2D
 
 
 class Preprocess:
@@ -46,6 +48,30 @@ class PreprocessSingle(Preprocess):
 
     def process_img(self, img):
         return img, KeepTransform()
+
+
+class PreprocessWithEstTf(Preprocess):
+    def __init__(self, imgname, estT):
+        self.imgname = imgname
+        self.estT = estT  # 最初的imgB到imgA的坐标变换
+
+    def process(self, dict_):
+        imgA = dict_['imgA']
+        imgB = dict_['imgB']
+        tA = dict_['tA']
+        tB = dict_['tB']
+        estT_curr = tA.inv().fog(self.estT).fog(tB)
+        if self.imgname == 'A':  #裁剪当前的imgA
+            imgA, t_ = self.process_img(imgA, imgB.shape, estT_curr)
+            tA = tA.fog(t_)
+            dict_['imgA'] = imgA
+            dict_['tA'] = tA
+        elif self.imgname == 'B':  #裁剪当前的imgB
+            imgB, t_ = self.process_img(imgB, imgA.shape, estT_curr.inv())
+            tB = tB.fog(t_)
+            dict_['imgB'] = imgB
+            dict_['tB'] = tB
+        return dict_
 
 
 # 计算图像B透视投影到图像A中与图像A的交集在图像A的坐标系下的包围框
@@ -104,7 +130,6 @@ def _auto_zoom(img, maxpixel=1e6, predown=None):
         n = math.ceil(math.sqrt(img.shape[0]*img.shape[1]/maxpixel))
     if isinstance(img, ImgView):
         img = img[::n, ::n].trim_scale()
-        n = img.scale
         img_ = img.get_array()
         return img_, n
     elif isinstance(img, np.ndarray):
@@ -115,6 +140,15 @@ def _auto_zoom(img, maxpixel=1e6, predown=None):
             return img, n
     else:
         raise TypeError(f'unknown type {type(img)}')
+
+
+class ApplyTransform(PreprocessSingle):
+    def __init__(self, imgname, transform):
+        super().__init__(imgname)
+        self.transform = transform
+
+    def process_img(self, img):
+        return img, self.transform
 
 
 class CutImg(PreprocessSingle):
@@ -174,3 +208,51 @@ class CutBlackLeftRight(PreprocessSingle):
         name = 'img'+self.imgname
         print(f'{name} cropoff black edge left-right in y:[{l},{r+1}), drop {percent:.2%}')
         return img, MoveZoomTransform(x0=l)
+
+
+class AutoCutEstTf(PreprocessWithEstTf):
+    def __init__(self, imgname, estT, extCoef=0, extMin=0):
+        super().__init__(imgname, estT)
+        self.extCoef = extCoef  # 扩展系数
+        self.extMin = extMin    # 最小扩展宽度
+
+    def process_img(self, img, other_shape, estT):
+        other_height, other_width = other_shape
+        box_other = shapely.box(0, 0, other_width, other_height)
+        box_other_in_img = estT(box_other)
+        xmin, ymin, xmax, ymax = box_other_in_img.bounds
+        if self.extCoef != 0 or self.extMin != 0:
+            xdelta = max(self.extMin, self.extCoef*(xmax-xmin))
+            ydelta = max(self.extMin, self.extCoef*(ymax-ymin))
+            xmin -= xdelta
+            xmax += xdelta
+            ymin -= ydelta
+            ymax += ydelta
+        xmin = int(min(max(0, xmin), img.shape[1]))
+        xmax = int(min(max(0, xmax), img.shape[1]))
+        ymin = int(min(max(0, ymin), img.shape[0]))
+        ymax = int(min(max(0, ymax), img.shape[0]))
+        cz2d = CropZoom2D(x0=xmin, y0=ymin, x1=xmax, y1=ymax)
+        mt = MoveZoomTransform(x0=xmin, y0=ymin)
+        if isinstance(img, ImgView):
+            img = img[cz2d]
+        else:
+            img = img[cz2d.to_slice()]
+        return img, mt
+
+
+class AutoZoomEstTf(PreprocessWithEstTf):
+    def __init__(self, imgname, estT, nX=1):
+        super().__init__(imgname, estT)
+        self.nX = nX  # 为后续变换预留
+
+    def process_img(self, img, other_shape, estT):
+        other_height, other_width = other_shape
+        if hasattr(estT, 'nz_at'):
+            nz_ = estT.nz_at(other_width/2, other_height/2)
+        else:
+            nz_ = estT.nz
+        nz = max(1, int(round(nz_/self.nX)))
+        img = img[::nz, ::nz]
+        mt = MoveZoomTransform(nz=nz)
+        return img, mt

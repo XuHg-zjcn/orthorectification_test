@@ -23,7 +23,6 @@ import numpy as np
 from PIL import Image
 import cv2
 import shapely
-import common
 
 
 class Transform(ABC):
@@ -85,6 +84,10 @@ class Transform(ABC):
         else:
             return ValueError(f'unsupport fog, type(outer)={type(self)}, type(inner)={type(inner)}')
 
+    @abstractmethod
+    def arr(self):
+        pass
+
 
 class KeepTransform(Transform):
     def __new__(cls):
@@ -125,6 +128,11 @@ class KeepTransform(Transform):
     @property
     def nz(self):
         return 1
+
+    @property
+    def arr(self):
+        return np.array([[1, 0, 0],
+                         [0, 1, 0]])
 
 
 class MoveZoomTransform(Transform):  # 平移缩放变换
@@ -172,6 +180,12 @@ class MoveZoomTransform(Transform):  # 平移缩放变换
             y0=self.y0+inner.y0*self.nz,
             nz=self.nz*inner.nz
         )
+
+    @property
+    def arr(self):
+        nz = self.nz
+        return np.array([[nz, 0,  self.x0],
+                         [0,  nz, self.y0]])
 
     def __str__(self):
         return f'xy0=({self.x0}, {self.y0}), nz={self.nz}'
@@ -336,6 +350,14 @@ class AffineTransform(Transform, np.ndarray):  # 仿射变换
     def y0(self):
         return self[1, 2]
 
+    @property
+    def nz(self):
+        return np.sqrt(np.sum(np.array(self[:2,:2])**2)/2)
+
+    @property
+    def arr(self):
+        return np.array(self)
+
 
 class PerspectiveTransform(AffineTransform):  # 透视变换
     compatibleLst = [AffineTransform]
@@ -376,3 +398,8 @@ class PerspectiveTransform(AffineTransform):  # 透视变换
         t = np.matmul(self, inner)
         t /= t[-1, -1]
         return t
+
+    def nz_at(self, x, y):
+        alpha = self[2,0]*x + self[2,1]*y + self[2,2]
+        ratio = 1/np.sqrt(np.sum((self[:2,:2]/alpha)**2)/2)
+        return np.sqrt(np.sum(np.array(self[:2,:2])**2)/2)

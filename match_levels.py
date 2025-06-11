@@ -31,6 +31,7 @@ import preprocess
 from imgmatch import H_transpose
 from imgmatch2 import ImgMatch
 from imgview import ImgView
+from transform import MoveZoomTransform
 
 
 def plusminus(nmax, n0, plusmax=None, minumax=None):
@@ -63,16 +64,18 @@ def get_corners_coord(geom):
 
 
 def compare_to(
-        imgA_, cut_A,
-        pathB, name, ratio,
+        imgA_, estH_B_to_Ap,
+        pathB, name,
         maxpointA=2000, maxpointB=2000,
-        threshold_m1m2_ratio=0.85):
+        threshold_m1m2_ratio=0.85,
+        extCoef=0.2, extMin=10):
     print(f'compare with {pathB}')
     dsB = gdal.Open(pathB, gdal.GA_ReadOnly)
     ivB = ImgView(dsB.GetRasterBand(1))
     im = ImgMatch(imgA_, ivB)
-    im.append_pobj(preprocess.CutImg('A', cz2d=cut_A))
-    im.append_pobj(preprocess.AutoZoom('B', predown=round(ratio/8)))
+    im.append_pobj(preprocess.AutoCutEstTf('A', estH_B_to_Ap, extCoef, extMin))
+    im.append_pobj(preprocess.AutoZoomEstTf('B', estH_B_to_Ap, nX=8))
+    im.append_pobj(preprocess.AutoZoom('B', predown=1))  #其实为了ImgView转numpy array
     im.append_pobj(preprocess.LaplacianAndDilate('B', nz=8))
     im.append_pobj(preprocess.CutBlackTopBottom('B'))
     im.append_pobj(preprocess.CutBlackLeftRight('B'))
@@ -107,44 +110,16 @@ def choiceImagePartInFrame(cpoint_inF, lst):
     nth_img = bisect.bisect(cum_width, cpoint_inF.x)-1
     print('cpoint in Frame', cpoint_inF, nth_img)
     x1 = cum_width[nth_img]
-    x2 = cum_width[nth_img+1]
-    ymax = lst[nth_img][3]
-    poly_B_in_F = shapely.box(x1, 0, x2, ymax)
-    return nth_img, poly_B_in_F
+    mt_B_to_F = MoveZoomTransform(x0=x1, y0=0)
+    return nth_img, mt_B_to_F
 
-def calcBox_BinA(H_F_to_A, A_shape, poly_B_in_F, extRangeA=0.2):
-    B_in_A = shapely_perspective(poly_B_in_F, H_F_to_A)
-    xmin, ymin, xmax, ymax = B_in_A.bounds
-    xdelta = max(100, xmax - xmin)*extRangeA
-    ydelta = max(100, ymax - ymin)*extRangeA
-    A_height, A_width = A_shape
-    xmin = int(max(xmin-xdelta, 0))
-    xmax = int(min(xmax+xdelta, A_width))
-    ymin = int(max(ymin-ydelta, 0))
-    ymax = int(min(ymax+ydelta, A_height))
-    x1, y1, x2, y2 = poly_B_in_F.bounds
-    alpha = H_F_to_A[2,0]*(x1+x2)/2 + H_F_to_A[2,1]*(y1+y2)/2 + H_F_to_A[2,2]
-    ratio = 1/np.sqrt(np.sum((H_F_to_A[:2,:2]/alpha)**2)/2)
-    return CropZoom2D(x0=xmin, y0=ymin, x1=xmax, y1=ymax, nz=1), ratio
-
-def calc_bbox_withH(D_shape, S_shape, H):
-    # 不应该在此阶段估计bbox，图像预处理后会切除边框，在预处理后再进行估计更准确
-    # 需在`ImgMatch`类实现`match_with_estH`方法
+def Is_Intersects_onTransform(D_shape, S_shape, H):
     S_height, S_width = S_shape
     D_height, D_width = D_shape
     box_S = shapely.box(0, 0, S_width, S_height)
     S_in_D = shapely_perspective(box_S, H)
     box_D = shapely.box(0, 0, D_width, D_height)
-    if not shapely.intersects(S_in_D, box_D):
-        return None
-    xmin, ymin, xmax, ymax = S_in_D.bounds
-    xmin = int(max(xmin, 0))
-    xmax = int(min(xmax, D_width))
-    ymin = int(max(ymin, 0))
-    ymax = int(min(ymax, D_height))
-    alpha = H[2,0]*D_width/2 + H[2,1]*D_height/2 + H[2,2]
-    ratio = 1/np.sqrt(np.sum((H[:2,:2]/alpha)**2)/2)
-    return CropZoom2D(x0=xmin, y0=ymin, x1=xmax, y1=ymax, nz=1), ratio
+    return shapely.intersects(S_in_D, box_D)
 
 def match_other_oneway(db, imgA_, H_B_to_Ap, iB, lst, irange, **kwargs):
     H_C_to_Ap = H_B_to_Ap
@@ -158,13 +133,10 @@ def match_other_oneway(db, imgA_, H_B_to_Ap, iB, lst, irange, **kwargs):
         H_D_to_C = db.get_match_tranform_bidire(iidC, iidD)
         if H_D_to_C is None:
             break
-        H_D_to_Ap_est = np.matmul(H_C_to_Ap, H_D_to_C)
-        H_D_to_Ap_est /= H_D_to_Ap_est[-1, -1]
-        res = calc_bbox_withH(imgA_.shape, D_shape, H_D_to_Ap_est)
-        if res is None:
+        H_D_to_Ap_est = H_C_to_Ap.fog(H_D_to_C)
+        if not Is_Intersects_onTransform(imgA_.shape, D_shape, H_D_to_Ap_est):
             break
-        cut_A, ratio = res
-        H_D_to_Ap, n_match = compare_to(imgA_, cut_A, pathD, nameD+'e', ratio, **kwargs)
+        H_D_to_Ap, n_match = compare_to(imgA_, H_D_to_Ap_est, pathD, nameD+'e', **kwargs)
         print(nameD, n_match)
         if H_D_to_Ap is None:
             break
@@ -212,31 +184,33 @@ if __name__ == '__main__':
     tA = tA.fog(t_)
     imgA_, t_ = preprocess.LaplacianAndDilate('A', nz=8).process_img(imgA_)
     tA = tA.fog(t_)
+    # 目前原则：造成坐标改变，谁处理谁还原，请不要在其他代码中隐式还原tA的变换
+    #   （在不是坐标变换的专用函数进行变换等，难以察觉的形式）
+    # 本文件的以后代码用'Ap'或'A_'表示已经处理的A
 
     print('ivA.shape', ivA.shape)
     print('imgA_.shape', imgA_.shape)
     A_height, A_width = imgA_.shape
-    H_A_to_geo = findPerspective(0, 0, A_width, A_height,
+    H_Ap_to_geo = findPerspective(0, 0, A_width, A_height,
                                 coord_ne, coord_se, coord_sw, coord_nw)
-    H_geo_to_A = np.linalg.inv(H_A_to_geo)
+    H_geo_to_Ap = H_Ap_to_geo.inv()
 
     for fid, name, poly, cpoint in db.get_intersect(fidA):
         lst = db.get_splited_image(fid)
         H_F_to_geo = calc_H_Frame_to_geo(lst, name, poly)
         if H_F_to_geo is None:
             continue
-        H_geo_to_F = np.linalg.inv(H_F_to_geo)
-        H_F_to_A = np.matmul(H_geo_to_A, H_F_to_geo)
+        H_geo_to_F = H_F_to_geo.inv()
+        H_F_to_Ap = H_geo_to_Ap.fog(H_F_to_geo)
         cpoint_inF = shapely_perspective(cpoint, H_geo_to_F)
-        nth_img, poly_B_in_F = choiceImagePartInFrame(cpoint_inF, lst)
-        cut_A, ratio = calcBox_BinA(H_F_to_A, imgA_.shape, poly_B_in_F, args.extRangeA)
-        print(cut_A, ratio)
+        nth_img, mt_B_to_F = choiceImagePartInFrame(cpoint_inF, lst)
+        estH_B_to_Ap = H_F_to_Ap.fog(mt_B_to_F)
 
         H_B_to_Ap = None
         iB = None  # iB是F中选中的分幅序号
         for i in plusminus(len(lst), nth_img, args.plusminus, args.plusminus):
             pathB = lst[i][1].split('\n')[0]
-            retval = try_func(compare_to, imgA_, cut_A, pathB, os.path.basename(pathB), ratio,
+            retval = try_func(compare_to, imgA_, estH_B_to_Ap, pathB, os.path.basename(pathB),
                              maxpointA=args.maxpointA,
                              maxpointB=args.maxpointB,
                              threshold_m1m2_ratio=args.threshold_m1m2_ratio)
@@ -253,6 +227,7 @@ if __name__ == '__main__':
         for iidD, H_D_to_Ap, n_match in match_other(db, imgA_, H_B_to_Ap, iB, lst):
             if n_match < args.minmatch:
                 continue
+            # 在此处还原tA的改变
             H_D_to_A = H_transpose(H_D_to_Ap, x0_d=tA.x0, y0_d=tA.y0, zoom_d=tA.nz)
             db.insert_match(iidA, iidD, H_D_to_A, None)
             db.commit()

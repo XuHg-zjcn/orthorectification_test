@@ -27,6 +27,7 @@ from common import shapely_perspective
 
 
 # 透视矩阵在图像裁剪，缩放下的变换
+# TODO: 弃用此函数，用Transform的复合运算代替
 def H_transpose(H, x0_s=0, y0_s=0, x0_d=0, y0_d=0, zoom_s=1, zoom_d=1):
     Td = np.array([[zoom_d, 0,      x0_d],
                    [0,      zoom_d, y0_d],
