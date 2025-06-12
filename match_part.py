@@ -72,7 +72,8 @@ if __name__ == '__main__':
                 print('match failed')
                 continue
             print(H_orig)
-            db.insert_match(iidA, iidB, H_orig, None)
+            poly_B_in_A = im.get_poly_B_in_A()
+            db.insert_match(iidA, iidB, H_orig, poly_B_in_A.wkt)
             db.commit()
             print('--------------------------')
         print('==========================')

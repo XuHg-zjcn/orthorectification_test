@@ -85,7 +85,7 @@ def compare_to(
         maxpoints2=maxpointB,
         threshold_m1m2_ratio=threshold_m1m2_ratio)
     H_B_to_Ap, n_match = im.match()
-    return H_B_to_Ap, n_match
+    return im
 
 def calc_H_Frame_to_geo(lst, name, poly):
     cum_width = np.cumsum(list(map(lambda x:x[2], lst)))
@@ -136,12 +136,14 @@ def match_other_oneway(db, imgA_, H_B_to_Ap, iB, lst, irange, **kwargs):
         H_D_to_Ap_est = H_C_to_Ap.fog(H_D_to_C)
         if not Is_Intersects_onTransform(imgA_.shape, D_shape, H_D_to_Ap_est):
             break
-        H_D_to_Ap, n_match = compare_to(imgA_, H_D_to_Ap_est, pathD, nameD+'e', **kwargs)
+        im = compare_to(imgA_, H_D_to_Ap_est, pathD, nameD+'e', **kwargs)
+        H_D_to_Ap = im.H
+        n_match = im.n_match
         print(nameD, n_match)
         if H_D_to_Ap is None:
             break
         else:
-            yield iidD, H_D_to_Ap, n_match
+            yield iidD, im
         iC = iD
         H_C_to_Ap = H_D_to_Ap
 
@@ -212,26 +214,33 @@ if __name__ == '__main__':
         iB = None  # iB是F中选中的分幅序号
         for i in plusminus(len(lst), nth_img, args.plusminus, args.plusminus):
             pathB = lst[i][1].split('\n')[0]
-            retval = try_func(compare_to, imgA_, estH_B_to_Ap, pathB, os.path.basename(pathB),
+            im = try_func(compare_to, imgA_, estH_B_to_Ap, pathB, os.path.basename(pathB),
                              maxpointA=args.maxpointA,
                              maxpointB=args.maxpointB,
                              threshold_m1m2_ratio=args.threshold_m1m2_ratio)
-            if retval is None:
+            if im.H is None:
                 continue
-            H_B_to_Ap, n_match = retval
-            if n_match < args.minmatch:
+            if im.n_match < args.minmatch:
                 continue
+            H_B_to_Ap = im.H
             iB = i
             break
             print('--------------------------')
         if iB is None or H_B_to_Ap is None:
             continue
-        for iidD, H_D_to_Ap, n_match in match_other(db, imgA_, H_B_to_Ap, iB, lst, extCoef=0, extMin=10):
+        for iidD, im in match_other(db, imgA_, H_B_to_Ap, iB, lst, extCoef=0, extMin=10):
+            H_D_to_Ap = im.H
+            n_match = im.n_match
             if n_match < args.minmatch:
                 continue
             # 在此处还原tA的改变
             H_D_to_A = tA.fog(H_D_to_Ap)
-            db.insert_match(iidA, iidD, H_D_to_A, None)
+            poly_D_in_Ap = im.get_poly_B_in_A()
+            poly_D_in_A = tA(poly_D_in_Ap)
+            print('match insert to db', iidA, iidD)
+            print(H_D_to_A)
+            print(poly_D_in_A)
+            db.insert_match(iidA, iidD, H_D_to_A, poly_D_in_A.wkt)
             db.commit()
         print('==========================')
     db.close()

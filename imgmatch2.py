@@ -17,6 +17,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #############################################################################
 import numpy as np
+import shapely
 from imgview import ImgView
 from imgmatch import compare
 from common import CropZoom2D
@@ -29,6 +30,8 @@ class ImgMatch:
         self.imgB = imgB
         self.pol = []     # 预处理对象列表(Preprocess Object List)
         self.cp = None    # 对比参数(Compare Param)
+        self.H = None
+        self.n_match = 0
 
     def append_pobj(self, x):
         self.pol.append(x)
@@ -53,10 +56,13 @@ class ImgMatch:
             return None, 0
         H_ = PerspectiveTransform(H_)
         H = tA.fog(H_).fog(tB.inv())
+        self.H = H
+        self.n_match = len(matchs)
         # TODO: 更进一步，使用高分辨率的图像分块处理，进行更高精度的对齐
-        # TODO: 在此处生成B_in_A的shapely.Polygon对象
         return H, len(matchs)
 
-    def match_with_estH(self, H_est):
-        # TODO: 实现此方法
-        pass
+    def get_poly_B_in_A(self):
+        # TODO: 应该取图像的有效区域
+        height_B, width_B = self.imgB.shape
+        box_B = shapely.box(0, 0, width_B, height_B)
+        return self.H(box_B)

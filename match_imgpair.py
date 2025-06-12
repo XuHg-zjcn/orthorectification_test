@@ -194,12 +194,9 @@ if __name__ == '__main__':
         print('too few match keypoint pairs')
         exit()
 
-    rect_A = shapely.box(0, 0, ivA.shape[1], ivA.shape[0])
-    rect_B = shapely.box(0, 0, ivB.shape[1], ivB.shape[0])
-    B_in_A = shapely_perspective(rect_B, H_orig)
-
     if opts['addto_db']:
         # TODO: 检查数据库里是否已存在，避免UNIQUE约束错误
+        B_in_A = im.get_poly_B_in_A()
         if result_in_db is None:
             db.insert_match(iidA, iidB, H_orig, B_in_A.wkt)
         else:
