@@ -23,7 +23,6 @@ import database
 import import_img
 from imgview import ImgView
 import preprocess
-from imgmatch import compare, H_transpose
 from imgmatch2 import ImgMatch
 from common import CropZoom2D
 

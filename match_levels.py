@@ -28,7 +28,6 @@ import database
 import import_img
 from common import shapely_perspective, findPerspective, try_func, CropZoom2D
 import preprocess
-from imgmatch import H_transpose
 from imgmatch2 import ImgMatch
 from imgview import ImgView
 from transform import MoveZoomTransform
@@ -228,7 +227,7 @@ if __name__ == '__main__':
             if n_match < args.minmatch:
                 continue
             # 在此处还原tA的改变
-            H_D_to_A = H_transpose(H_D_to_Ap, x0_d=tA.x0, y0_d=tA.y0, zoom_d=tA.nz)
+            H_D_to_A = tA.fog(H_D_to_Ap)
             db.insert_match(iidA, iidD, H_D_to_A, None)
             db.commit()
         print('==========================')

@@ -24,7 +24,7 @@ import numpy as np
 import shapely
 import preprocess
 from metadata import read_metadata
-from imgmatch import H_transpose, compare, create_rb3dview
+from imgmatch import create_rb3dview
 import database
 import import_img
 from common import shapely_perspective, CropZoom2D

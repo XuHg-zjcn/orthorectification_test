@@ -18,7 +18,7 @@
 #############################################################################
 import numpy as np
 from imgview import ImgView
-from imgmatch import compare, H_transpose
+from imgmatch import compare
 from common import CropZoom2D
 from transform import KeepTransform, PerspectiveTransform
 
@@ -51,12 +51,8 @@ class ImgMatch:
         H_, matchs = compare(imgA_, imgB_, *self.cp[0], **self.cp[1])
         if H_ is None:
             return None, 0
-        H = H_transpose(
-            H_,
-            x0_d=tA.x0, y0_d=tA.y0, zoom_d=tA.nz,
-            x0_s=tB.x0, y0_s=tB.y0, zoom_s=tB.nz
-        )
-        H = PerspectiveTransform(H)
+        H_ = PerspectiveTransform(H_)
+        H = tA.fog(H_).fog(tB.inv())
         # TODO: 更进一步，使用高分辨率的图像分块处理，进行更高精度的对齐
         # TODO: 在此处生成B_in_A的shapely.Polygon对象
         return H, len(matchs)
