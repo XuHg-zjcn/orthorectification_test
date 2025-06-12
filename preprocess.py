@@ -188,6 +188,83 @@ class LaplacianAndDilate(PreprocessSingle):
         return img, MoveZoomTransform(nz=self.nz)
 
 
+class EdgeDetection(PreprocessSingle):
+    kern_ra = np.array([[-1, 0], [0, 1]])
+    kern_rb = np.array([[0, -1], [1, 0]])
+    def __init__(self, imgname,
+                 w_Laplace=1,
+                 w_Roberts=1.414,
+                 w_Sobel=0.53,
+                 use_abs=True):
+        super().__init__(imgname)
+        self.w_Laplace = w_Laplace
+        self.w_Roberts = w_Roberts
+        self.w_Sobel = w_Sobel
+        self.use_abs = use_abs
+
+    def process_img_float(self, img):
+        G_all = np.zeros_like(img, dtype=np.float32)
+        if self.w_Laplace != 0:
+            L = np.abs(cv2.Laplacian(img, cv2.CV_32F))
+            G_all += self.w_Laplace*L
+        if self.w_Roberts != 0:
+            Gra = cv2.filter2D(img, cv2.CV_32F, self.kern_ra)
+            Grb = cv2.filter2D(img, cv2.CV_32F, self.kern_rb)
+            Gr = cv2.magnitude(Gra, Grb)
+            G_all += self.w_Roberts*Gr
+        if self.w_Sobel != 0:
+            Gsx = cv2.Sobel(img, cv2.CV_32F, 1, 0)
+            Gsy = cv2.Sobel(img, cv2.CV_32F, 0, 1)
+            Gs = cv2.magnitude(Gsx, Gsy)
+            G_all += self.w_Sobel*Gs
+        G_all *= 255/(0.7*G_all.max() + 0.3*np.sqrt(np.mean(G_all**2)))
+        G_all_u8 = np.clip(G_all, 0, 255).astype(np.uint8)
+        return G_all_u8, KeepTransform()
+
+    def process_img_abs(self, img):
+        G_all = np.zeros_like(img, dtype=np.uint64)
+        if self.w_Laplace != 0:
+            L = np.abs(cv2.Laplacian(img, cv2.CV_16S))
+            w_Laplace_ = int(round(self.w_Laplace*100))
+            G_all += w_Laplace_ * (L.astype(np.uint64))
+        if self.w_Roberts != 0:
+            Gra = cv2.filter2D(img, cv2.CV_16S, self.kern_ra)
+            Grb = cv2.filter2D(img, cv2.CV_16S, self.kern_rb)
+            Gr = np.abs(Gra)+np.abs(Grb)
+            w_Roberts_ = int(round(self.w_Roberts*100))
+            G_all += w_Roberts_ * (Gr.astype(np.uint64))
+        if self.w_Sobel != 0:
+            Gsx = cv2.Sobel(img, cv2.CV_16S, 1, 0)
+            Gsy = cv2.Sobel(img, cv2.CV_16S, 0, 1)
+            Gs = np.abs(Gsx)+np.abs(Gsy)
+            w_Sobel_ = int(round(self.w_Sobel*100))
+            G_all += w_Sobel_ * (Gs.astype(np.uint64))
+        scale = (0.7*float(G_all.max()) + 0.3*1.2*float(np.mean(G_all)))/255
+        G_all //= int(round(scale))
+        G_all_u8 = np.clip(G_all, 0, 255).astype(np.uint8)
+        return G_all_u8, KeepTransform()
+
+    def process_img(self, img):
+        if self.use_abs:
+            return self.process_img_abs(img)
+        else:
+            return self.process_img_float(img)
+
+
+class DilateAndDownsamp(PreprocessSingle):
+    def __init__(self, imgname, nz):
+        super().__init__(imgname)
+        self.nz = nz
+        self.kern = cv2.getStructuringElement(
+            cv2.MORPH_ELLIPSE if self.nz >= 5 else cv2.MORPH_RECT, (self.nz, self.nz))
+
+    def process_img(self, img):
+        img = cv2.dilate(img, self.kern)
+        img = cv2.resize(img, None, None, 1.0/self.nz, 1.0/self.nz, cv2.INTER_AREA)
+        mt = MoveZoomTransform(nz=self.nz)
+        return img, mt
+
+
 class CutBlackTopBottom(PreprocessSingle):
     def process_img(self, img):
         height_in = img.shape[0]

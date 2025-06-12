@@ -75,7 +75,8 @@ def compare_to(
     im.append_pobj(preprocess.AutoCutEstTf('A', estH_B_to_Ap, extCoef, extMin))
     im.append_pobj(preprocess.AutoZoomEstTf('B', estH_B_to_Ap, nX=8))
     im.append_pobj(preprocess.AutoZoom('B', predown=1))  #其实为了ImgView转numpy array
-    im.append_pobj(preprocess.LaplacianAndDilate('B', nz=8))
+    im.append_pobj(preprocess.EdgeDetection('B'))
+    im.append_pobj(preprocess.DilateAndDownsamp('B', nz=8))
     im.append_pobj(preprocess.CutBlackTopBottom('B'))
     im.append_pobj(preprocess.CutBlackLeftRight('B'))
     im.setParam_compare(
@@ -181,7 +182,9 @@ if __name__ == '__main__':
     tA = tA.fog(t_)
     imgA_, t_ = preprocess.CutBlackLeftRight('A').process_img(imgA_)
     tA = tA.fog(t_)
-    imgA_, t_ = preprocess.LaplacianAndDilate('A', nz=8).process_img(imgA_)
+    imgA_, t_ = preprocess.EdgeDetection('A').process_img(imgA_)
+    tA = tA.fog(t_)
+    imgA_, t_ = preprocess.DilateAndDownsamp('A', nz=8).process_img(imgA_)
     tA = tA.fog(t_)
     # 目前原则：造成坐标改变，谁处理谁还原，请不要在其他代码中隐式还原tA的变换
     #   （在不是坐标变换的专用函数进行变换等，难以察觉的形式）
@@ -223,7 +226,7 @@ if __name__ == '__main__':
             print('--------------------------')
         if iB is None or H_B_to_Ap is None:
             continue
-        for iidD, H_D_to_Ap, n_match in match_other(db, imgA_, H_B_to_Ap, iB, lst):
+        for iidD, H_D_to_Ap, n_match in match_other(db, imgA_, H_B_to_Ap, iB, lst, extCoef=0, extMin=10):
             if n_match < args.minmatch:
                 continue
             # 在此处还原tA的改变
