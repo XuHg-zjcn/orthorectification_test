@@ -62,6 +62,8 @@ class Database:
             'b_imgid INT,'
             'transform BLOB,'  # 投影矩阵，9个double值
             'area_b_in_a POLYGON,'
+            'n_points INTEGER,'     # 匹配的点数
+            'last_update DATETIME,' # 最后更新时间
             'isChecked BOOL,'  # 是否经过人工检查
             'FOREIGN KEY (a_imgid) REFERENCES images(id),'
             'FOREIGN KEY (b_imgid) REFERENCES images(id),'
@@ -155,46 +157,53 @@ class Database:
             if os.path.isfile(path) and os.stat(path).st_size == size:
                 return path
 
-    def insert_match(self, iid1, iid2, transform, area_b_in_a):
+    def insert_match(self, iid1, iid2, transform, area_b_in_a, n_points):
         assert transform.shape == (3,3)
         transform_blob = transform.astype(np.float64).tobytes()
         cursor = self.conn.cursor()
         cursor.execute(
             'INSERT INTO matchs '
-            '(a_imgid, b_imgid, transform, area_b_in_a) '
-            'VALUES(?,?,?,ST_GeomFromText(?,0));',
-            (iid1, iid2, transform_blob, area_b_in_a)
+            '(a_imgid, b_imgid, transform, area_b_in_a, n_points, last_update) '
+            'VALUES(?,?,?,ST_GeomFromText(?,0), ?, CURRENT_TIMESTAMP);',
+            (iid1, iid2, transform_blob, area_b_in_a, n_points)
         )
 
-    def update_match(self, iid1, iid2, transform, area_b_in_a):
+    def update_match(self, iid1, iid2, transform, area_b_in_a, n_points):
         assert transform.shape == (3,3)
         transform_blob = transform.astype(np.float64).tobytes()
         cursor = self.conn.cursor()
         cursor.execute(
-            'UPDATE matchs SET transform=?, area_b_in_a=ST_GeomFromText(?,0) WHERE a_imgid=? AND b_imgid=?;',
-            (transform_blob, area_b_in_a, iid1, iid2)
+            'UPDATE matchs '
+            'SET transform=?, '
+            'area_b_in_a=ST_GeomFromText(?,0), '
+            'n_points=?, '
+            'last_update=CURRENT_TIMESTAMP '
+            'WHERE a_imgid=? AND b_imgid=?;',
+            (transform_blob, area_b_in_a, iid1, iid2, n_points)
         )
 
-    def insert_replace_match(self, iid1, iid2, transform, area_b_in_a):
+    def insert_replace_match(self, iid1, iid2, transform, area_b_in_a, n_points):
         assert transform.shape == (3,3)
         transform_blob = transform.astype(np.float64).tobytes()
         cursor = self.conn.cursor()
         cursor.execute(
             'INSERT OR REPLACE INTO matchs '
-            '(a_imgid, b_imgid, transform, area_b_in_a) '
-            'VALUES(?,?,?,ST_GeomFromText(?,0));',
-            (iid1, iid2, transform_blob, area_b_in_a)
+            '(a_imgid, b_imgid, transform, area_b_in_a, n_points, last_update) '
+            'VALUES(?,?,?,ST_GeomFromText(?,0), ?, CURRENT_TIMESTAMP);',
+            (iid1, iid2, transform_blob, area_b_in_a, n_points)
         )
 
     def get_match(self, iid1, iid2):
         cursor = self.conn.cursor()
         cursor.execute(
-            "SELECT transform, ST_AsText(area_b_in_a) FROM matchs WHERE a_imgid=? AND b_imgid=?;",
+            "SELECT transform, ST_AsText(area_b_in_a), n_points, last_update "
+            "FROM matchs "
+            "WHERE a_imgid=? AND b_imgid=?;",
             (iid1, iid2))
-        for tf_blob, area_b_in_a in cursor:
+        for tf_blob, area_b_in_a, n_points, last_update in cursor:
             tf = np.frombuffer(tf_blob, np.float64).reshape((3, 3))
             tf = PerspectiveTransform(tf)
-            return tf, area_b_in_a
+            return tf, area_b_in_a, n_points, last_update
 
     def get_match_tranform_bidire(self, iid1, iid2):
         res1 = self.get_match(iid1, iid2)
@@ -253,20 +262,9 @@ class Database:
             'FROM matchs AS match1 '
             'JOIN matchs AS match2 '
             'ON match1.a_imgid = match2.a_imgid '
-            'WHERE match1.b_imgid = :iid1 AND match2.b_imgid = :iid2 '
-            'UNION '
-            'SELECT match1.a_imgid '
-            'FROM matchs AS match1 '
-            'JOIN matchs AS match2 '
-            'ON match1.a_imgid = match2.b_imgid '
-            'WHERE match1.b_imgid = :iid1 AND match2.a_imgid = :iid2 '
-            'UNION '
-            'SELECT match1.b_imgid '
-            'FROM matchs AS match1 '
-            'JOIN matchs AS match2 '
-            'ON match1.b_imgid = match2.b_imgid '
-            'WHERE match1.a_imgid = :iid1 AND match2.a_imgid = :iid2;',
-            {'iid1':iid1, 'iid2':iid2}
+            'WHERE match1.b_imgid=? AND match2.b_imgid=? '
+            'ORDER BY match1.n_points * match2.n_points DESC;',
+            (iid1, iid2)
         )
         return list(map(lambda x:x[0],cursor))
 

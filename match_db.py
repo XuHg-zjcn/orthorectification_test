@@ -89,8 +89,8 @@ if __name__ == '__main__':
             print(im.H)
             B_in_A = im.get_poly_B_in_A()
             A_in_B = im.get_poly_A_in_B()
-            db.insert_replace_match(iidA, iidB, im.H, B_in_A.wkt)
-            db.insert_replace_match(iidB, iidA, im.H.inv(), A_in_B.wkt)
+            db.insert_replace_match(iidA, iidB, im.H, B_in_A.wkt, im.n_match)
+            db.insert_replace_match(iidB, iidA, im.H.inv(), A_in_B.wkt, im.n_match)
             db.commit()
             n_sucess += 1
             break

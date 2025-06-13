@@ -121,10 +121,12 @@ if __name__ == '__main__':
     result_in_db = db.get_match(iidA, iidB)
     if result_in_db is not None:
         print('found in database')
-        H, area_B_in_A_wkt = result_in_db
+        H, area_B_in_A_wkt, n_points, last_update = result_in_db
         area_B_in_A = shapely.from_wkt(area_B_in_A_wkt)
         print(H)
         print(area_B_in_A.wkt)
+        print(n_points, 'points')
+        print('last_update', last_update)
         if not opts['update_db']:
             exit()
 
@@ -197,12 +199,13 @@ if __name__ == '__main__':
     if opts['addto_db']:
         # TODO: 检查数据库里是否已存在，避免UNIQUE约束错误
         B_in_A = im.get_poly_B_in_A()
+        A_in_B = im.get_poly_A_in_B()
         if result_in_db is None:
-            db.insert_match(iidA, iidB, H_orig, B_in_A.wkt)
-            db.insert_replace_match(iidB, iidA, H_orig.inv(), A_in_B.wkt)
+            db.insert_replace_match(iidA, iidB, H_orig, B_in_A.wkt, n_match)
+            db.insert_replace_match(iidB, iidA, H_orig.inv(), A_in_B.wkt, n_match)
         else:
-            db.update_match(iidA, iidB, H_orig, B_in_A.wkt)
-            db.insert_replace_match(iidB, iidA, H_orig.inv(), A_in_B.wkt)
+            db.insert_replace_match(iidA, iidB, H_orig, B_in_A.wkt, n_match)
+            db.insert_replace_match(iidB, iidA, H_orig.inv(), A_in_B.wkt, n_match)
         db.commit()
         db.close()
 
