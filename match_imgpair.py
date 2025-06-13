@@ -199,8 +199,10 @@ if __name__ == '__main__':
         B_in_A = im.get_poly_B_in_A()
         if result_in_db is None:
             db.insert_match(iidA, iidB, H_orig, B_in_A.wkt)
+            db.insert_replace_match(iidB, iidA, H_orig.inv(), A_in_B.wkt)
         else:
             db.update_match(iidA, iidB, H_orig, B_in_A.wkt)
+            db.insert_replace_match(iidB, iidA, H_orig.inv(), A_in_B.wkt)
         db.commit()
         db.close()
 

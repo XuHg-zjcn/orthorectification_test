@@ -87,7 +87,13 @@ if __name__ == '__main__':
                 continue
             print(f'{im.n_match} points match')
             print(im.H)
+            B_in_A = im.get_poly_B_in_A()
+            A_in_B = im.get_poly_A_in_B()
+            db.insert_replace_match(iidA, iidB, im.H, B_in_A.wkt)
+            db.insert_replace_match(iidB, iidA, im.H.inv(), A_in_B.wkt)
+            db.commit()
             n_sucess += 1
             break
+    db.close()
     print('===================')
     print(f'matched {n_total} imgpairs, {n_sucess} sucess, {n_total-n_sucess} failed')

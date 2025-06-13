@@ -49,8 +49,9 @@ if __name__ == '__main__':
             print('compare')
             print(f'A: {pathA}')
             print(f'B: {pathB}')
-            result_in_db = db.get_match(iidA, iidB)
-            if result_in_db is not None:
+            result_in_db1 = db.get_match(iidA, iidB)
+            result_in_db2 = db.get_match(iidB, iidA)
+            if result_in_db1 is not None and result_in_db2 is not None:
                 print('already in db')
                 continue
             dsA = gdal.Open(pathA, gdal.GA_ReadOnly)
@@ -73,7 +74,9 @@ if __name__ == '__main__':
                 continue
             print(H_orig)
             poly_B_in_A = im.get_poly_B_in_A()
-            db.insert_match(iidA, iidB, H_orig, poly_B_in_A.wkt)
+            poly_A_in_B = im.get_poly_A_in_B()
+            db.insert_replace_match(iidA, iidB, H_orig, poly_B_in_A.wkt)
+            db.insert_replace_match(iidB, iidA, H_orig.inv(), poly_A_in_B.wkt)
             db.commit()
             print('--------------------------')
         print('==========================')

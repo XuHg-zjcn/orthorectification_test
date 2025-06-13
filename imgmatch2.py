@@ -66,3 +66,8 @@ class ImgMatch:
         height_B, width_B = self.imgB.shape
         box_B = shapely.box(0, 0, width_B, height_B)
         return self.H(box_B)
+
+    def get_poly_A_in_B(self):
+        height_A, width_A = self.imgA.shape
+        box_A = shapely.box(0, 0, width_A, height_A)
+        return self.H.inv()(box_A)

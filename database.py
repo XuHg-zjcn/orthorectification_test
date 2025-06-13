@@ -160,7 +160,9 @@ class Database:
         transform_blob = transform.astype(np.float64).tobytes()
         cursor = self.conn.cursor()
         cursor.execute(
-            'INSERT INTO matchs (a_imgid, b_imgid, transfrom, area_b_in_a) VALUES(?,?,?,ST_GeomFromText(?,0));',
+            'INSERT INTO matchs '
+            '(a_imgid, b_imgid, transfrom, area_b_in_a) '
+            'VALUES(?,?,?,ST_GeomFromText(?,0));',
             (iid1, iid2, transform_blob, area_b_in_a)
         )
 
@@ -171,6 +173,17 @@ class Database:
         cursor.execute(
             'UPDATE matchs SET transfrom=?, area_b_in_a=ST_GeomFromText(?,0) WHERE a_imgid=? AND b_imgid=?;',
             (transform_blob, area_b_in_a, iid1, iid2)
+        )
+
+    def insert_replace_match(self, iid1, iid2, transform, area_b_in_a):
+        assert transform.shape == (3,3)
+        transform_blob = transform.astype(np.float64).tobytes()
+        cursor = self.conn.cursor()
+        cursor.execute(
+            'INSERT OR REPLACE INTO matchs '
+            '(a_imgid, b_imgid, transfrom, area_b_in_a) '
+            'VALUES(?,?,?,ST_GeomFromText(?,0));',
+            (iid1, iid2, transform_blob, area_b_in_a)
         )
 
     def get_match(self, iid1, iid2):
