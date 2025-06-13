@@ -20,6 +20,7 @@ import sqlite3
 import os
 import numpy as np
 import shapely
+from transform import PerspectiveTransform
 
 
 class Database:
@@ -142,6 +143,18 @@ class Database:
             if any(map(lambda x:filename==os.path.basename(x), path_lst)):
                 return idx
 
+    def get_img_path_byid(self, iid):
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT paths, size FROM images WHERE id=?;", (iid,))
+        lst = list(cursor)
+        if len(lst) == 0:
+            return None
+        paths = lst[0][0].split('\n')
+        size = lst[0][1]
+        for path in paths:
+            if os.path.isfile(path) and os.stat(path).st_size == size:
+                return path
+
     def insert_match(self, iid1, iid2, transform, area_b_in_a):
         assert transform.shape == (3,3)
         transform_blob = transform.astype(np.float64).tobytes()
@@ -165,9 +178,10 @@ class Database:
         cursor.execute(
             "SELECT transfrom, ST_AsText(area_b_in_a) FROM matchs WHERE a_imgid=? AND b_imgid=?;",
             (iid1, iid2))
-        for transfrom_blob, area_b_in_a in cursor:
-            transfrom = np.frombuffer(transfrom_blob, np.float64).reshape((3, 3))
-            return transfrom, area_b_in_a
+        for tf_blob, area_b_in_a in cursor:
+            tf = np.frombuffer(tf_blob, np.float64).reshape((3, 3))
+            tf = PerspectiveTransform(tf)
+            return tf, area_b_in_a
 
     def get_match_tranform_bidire(self, iid1, iid2):
         res1 = self.get_match(iid1, iid2)
@@ -175,8 +189,8 @@ class Database:
             return res1[0]
         res2 = self.get_match(iid2, iid1)
         if res2 is not None:
-            transfrom, _ = res2
-            return np.linalg.inv(transfrom)
+            tf, _ = res2
+            return tf.inv()
 
     def get_intersect(self, fid):
         cursor = self.conn.cursor()
@@ -193,6 +207,55 @@ class Database:
             cpoint = shapely.from_wkt(wkt_cpoint)
             lst.append((id_, name, poly, cpoint))
         return lst
+
+    def get_imagepairs_need_match(self, iid=None):
+        cursor = self.conn.cursor()
+        # 此处SQL代码按照DeepSeek的提示进行修改
+        query = (
+            'SELECT DISTINCT match1.b_imgid, match2.b_imgid '
+            'FROM matchs AS match1 '
+            'JOIN matchs AS match2 '
+            'ON match1.a_imgid = match2.a_imgid '
+            'AND match1.b_imgid < match2.b_imgid '
+            'WHERE '
+            +('match1.a_imgid = ? AND ' if iid is not None else '')+
+            'ST_Intersects(match1.area_b_in_a, match2.area_b_in_a) '
+            'AND NOT EXISTS ( '
+            '   SELECT 1 '
+            '   FROM matchs '
+            '   WHERE (a_imgid=match1.b_imgid AND b_imgid=match2.b_imgid) '
+            '   OR (b_imgid=match1.b_imgid AND a_imgid=match2.b_imgid)) '
+            'ORDER BY ST_Area(ST_Intersection(match1.area_b_in_a, match2.area_b_in_a)) DESC;'
+        )
+        if iid is not None:
+            cursor.execute(query, (iid,))
+        else:
+            cursor.execute(query)
+        return list(cursor)
+
+    def get_matchways(self, iid1, iid2):
+        cursor = self.conn.cursor()
+        cursor.execute(
+            'SELECT match1.a_imgid '
+            'FROM matchs AS match1 '
+            'JOIN matchs AS match2 '
+            'ON match1.a_imgid = match2.a_imgid '
+            'WHERE match1.b_imgid = :iid1 AND match2.b_imgid = :iid2 '
+            'UNION '
+            'SELECT match1.a_imgid '
+            'FROM matchs AS match1 '
+            'JOIN matchs AS match2 '
+            'ON match1.a_imgid = match2.b_imgid '
+            'WHERE match1.b_imgid = :iid1 AND match2.a_imgid = :iid2 '
+            'UNION '
+            'SELECT match1.b_imgid '
+            'FROM matchs AS match1 '
+            'JOIN matchs AS match2 '
+            'ON match1.b_imgid = match2.b_imgid '
+            'WHERE match1.a_imgid = :iid1 AND match2.a_imgid = :iid2;',
+            {'iid1':iid1, 'iid2':iid2}
+        )
+        return list(map(lambda x:x[0],cursor))
 
     def commit(self):
         self.conn.commit()
