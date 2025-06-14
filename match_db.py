@@ -16,6 +16,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #############################################################################
+import argparse
 import database
 import numpy as np
 from osgeo import gdal
@@ -93,9 +94,34 @@ def match_img(pathA, pathB, iidA, iidB, estT_B_to_A):
     return im
 
 
-if __name__ == '__main__':
-    # TODO: 添加命令行参数解析
-    db = database.Database('data/imagery.db')
+def match_imgpair_autoest(db, iidA, iidB):
+    result = db.get_matchways_more_tf_singlepair(iidA, iidB, maxlength=3)
+    tf_suggest = get_suggest_transforms(result)
+    for transform_np in tf_suggest[:3]:
+        t_B_to_A = transform.PerspectiveTransform(transform_np)
+        pathA = db.get_img_path_byid(iidA)
+        pathB = db.get_img_path_byid(iidB)
+        print(pathA)
+        print(pathB)
+        print(t_B_to_A)
+        im = common.try_func(match_img, pathA, pathB, iidA, iidB, t_B_to_A)
+        if im is None or im.H is None:
+            print('match failed')
+            return
+        if im.n_match < 12:
+            print(f'{im.n_match} points match, too few')
+            return
+        print(f'{im.n_match} points match')
+        print(im.H)
+        B_in_A = im.get_poly_B_in_A()
+        A_in_B = im.get_poly_A_in_B()
+        db.insert_replace_match(iidA, iidB, im.H, B_in_A.wkt, im.n_match)
+        db.insert_replace_match(iidB, iidA, im.H.inv(), A_in_B.wkt, im.n_match)
+        db.commit()
+        return im
+
+
+def intersect_matchs_in_db(db):
     imgpairs = db.get_imagepairs_need_match()
     n_total = len(imgpairs)
     n_sucess = 0
@@ -103,31 +129,28 @@ if __name__ == '__main__':
     for iidA, iidB in imgpairs:
         print('===================')
         print(iidA, iidB)
-        result = db.get_matchways_more_tf_singlepair(iidA, iidB, maxlength=3)
-        tf_suggest = get_suggest_transforms(result)
-        for transform_np in tf_suggest[:3]:
-            t_B_to_A = transform.PerspectiveTransform(transform_np)
-            pathA = db.get_img_path_byid(iidA)
-            pathB = db.get_img_path_byid(iidB)
-            print(pathA)
-            print(pathB)
-            print(t_B_to_A)
-            im = common.try_func(match_img, pathA, pathB, iidA, iidB, t_B_to_A)
-            if im is None or im.H is None:
-                print('match failed')
-                continue
-            if im.n_match < 12:
-                print(f'{im.n_match} points match, too few')
-                continue
-            print(f'{im.n_match} points match')
-            print(im.H)
-            B_in_A = im.get_poly_B_in_A()
-            A_in_B = im.get_poly_A_in_B()
-            db.insert_replace_match(iidA, iidB, im.H, B_in_A.wkt, im.n_match)
-            db.insert_replace_match(iidB, iidA, im.H.inv(), A_in_B.wkt, im.n_match)
-            db.commit()
+        im = match_imgpair_autoest(db, iidA, iidB)
+        if im is not None:
             n_sucess += 1
             break
-    db.close()
     print('===================')
     print(f'matched {n_total} imgpairs, {n_sucess} sucess, {n_total-n_sucess} failed')
+
+
+def delete_error_match(db):
+    pass
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--intersect_matchs_in_db', action='store_true')
+    parser.add_argument('--delete_error_match', action='store_true')
+    parser.add_argument('-r', '--recursive', action='store_true')
+    parser.add_argument('--intersect_pyproj', action='store_true')
+    args = parser.parse_args()
+    db = database.Database('data/imagery.db')
+    if args.delete_error_match:
+        delete_error_match(db)
+    if args.intersect_matchs_in_db:
+        intersect_matchs_in_db(db)
+    db.close()
