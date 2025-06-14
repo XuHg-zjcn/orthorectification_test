@@ -17,6 +17,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #############################################################################
 import sqlite3
+from collections import defaultdict, namedtuple
 import os
 import numpy as np
 import shapely
@@ -255,7 +256,7 @@ class Database:
             cursor.execute(query)
         return list(cursor)
 
-    def get_matchways(self, iid1, iid2):
+    def get_matchways_len2(self, iid1, iid2):
         cursor = self.conn.cursor()
         cursor.execute(
             'SELECT match1.a_imgid '
@@ -267,6 +268,68 @@ class Database:
             (iid1, iid2)
         )
         return list(map(lambda x:x[0],cursor))
+
+    def get_matchways_more(self, start, ends, maxlength=3):
+        ResultItem = namedtuple('ResultItem', ['path', 'weight'])
+        # 此处SQL代码由DeepSeek给出并做修改
+        cursor = self.conn.cursor()
+        sql = '''
+        WITH RECURSIVE cte AS (
+        SELECT b_imgid AS current_node,
+            ',' || a_imgid || ',' || b_imgid || ',' AS path,
+            1.0/n_points AS total_weight,
+            1 AS length
+        FROM matchs
+        WHERE a_imgid = ? -- 起点
+        UNION ALL
+        SELECT m.b_imgid AS current_node,
+            cte.path || m.b_imgid || ',' AS path,
+            cte.total_weight + 1.0/m.n_points AS total_weight,
+            cte.length + 1 AS length
+        FROM cte, matchs m
+        WHERE m.a_imgid = cte.current_node
+        AND cte.path NOT LIKE '%,' || m.b_imgid || ',%'
+        AND cte.length < ? -- 路径长度限制
+        )
+        SELECT path, 1.0/total_weight
+        FROM cte
+        WHERE ? LIKE '%,' || current_node || ',%' -- 多个终点
+        ORDER BY 1.0/total_weight DESC;
+        '''
+        ends_str = ','+(','.join(map(lambda x:str(x), ends)))+','
+        cursor.execute(sql, (start, maxlength, ends_str))
+        paths_lst = []
+        for path_str, weight in cursor:
+            path_intlst = list(map(lambda x:int(x), path_str.split(',')[1:-1]))
+            paths_lst.append(ResultItem(path_intlst, weight))
+        return paths_lst
+
+    def get_matchways_more_tf(self, start_end_pairs, maxlength=3):
+        ResultItem = namedtuple('ResultItem', ['path', 'weight', 'transform'])
+        d = defaultdict(set) # 以start为键，值为end组成的集合
+        for start, end in start_end_pairs:
+            d[start].add(end)
+        result = defaultdict(list)  # 以(start,end)为键，值为ResultItem对象
+        for start, ends in d.items():
+            paths_lst = self.get_matchways_more(start, ends, maxlength)
+            for path, weight in paths_lst:
+                node_pre = None
+                t = PerspectiveTransform.keep()
+                for node in path:
+                    if node_pre is None:
+                        node_pre = node
+                        continue
+                    t_ = self.get_match_tranform_bidire(node, node_pre)
+                    t = t_.fog(t)
+                    node_pre = node
+                pair = (path[0], path[-1])
+                result[pair].append(ResultItem(path, weight, t))
+        return result
+
+    def get_matchways_more_tf_singlepair(self, start, end, maxlength=3):
+        pair = (start, end)
+        result = self.get_matchways_more_tf([pair], maxlength)
+        return result[pair]
 
     def commit(self):
         self.conn.commit()

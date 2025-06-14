@@ -17,11 +17,45 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #############################################################################
 import database
+import numpy as np
 from osgeo import gdal
 from imgview import ImgView
 from imgmatch2 import ImgMatch
+import transform
 import preprocess
 import common
+
+
+def get_suggest_transforms(lst):
+    # TODO: 返回数据来源'avg_filted', 'mid', 'avg', 路径节点序列等
+    def generate_out(x, tfs):
+        x = np.concatenate((x, tfs), axis=0)
+        x = np.unique(x, axis=0)
+        ones = np.ones(x.shape[0]).reshape((-1, 1))
+        x = np.concatenate((x, ones), axis=1)
+        x = x.reshape((-1, 3, 3))
+        return x
+    n = len(lst)
+    if n <= 2:
+        return list(map(lambda x:x.transform, lst))
+    tfs = np.zeros((n, 8))
+    weights = np.zeros((n,))
+    for i in range(n):
+        _, weight, transform = lst[i]
+        tfs[i] = (transform/transform[-1,-1]).flatten()[:-1]
+        weights[i] = weight
+    avg = np.average(tfs, axis=0, weights=weights)
+    mid = np.median(tfs, axis=0)
+    mad = np.median(np.abs(tfs-mid), axis=0)
+    z_score_m = np.sqrt(np.mean(((tfs-mid)/mad)**2, axis=1))
+
+    tfs_filted = tfs[z_score_m<3]
+    weights_filted = tfs[z_score_m<3]
+    if len(tfs_filted) == 0:
+        return generate_out([mid, avg], tfs)
+    else:
+        avg_filted = np.average(tfs_filted, axis=0, weights=weights_filted)
+        return generate_out([avg_filted, mid, avg], tfs)
 
 
 def match_img(pathA, pathB, iidA, iidB, estT_B_to_A):
@@ -68,11 +102,11 @@ if __name__ == '__main__':
     print(f'found {n_total} imagepairs need matching in database')
     for iidA, iidB in imgpairs:
         print('===================')
-        for iidC in db.get_matchways(iidA, iidB):
-            print(iidA, iidB, iidC)
-            t_A_to_C = db.get_match_tranform_bidire(iidC, iidA)
-            t_B_to_C = db.get_match_tranform_bidire(iidC, iidB)
-            t_B_to_A = t_A_to_C.inv().fog(t_B_to_C)
+        print(iidA, iidB)
+        result = db.get_matchways_more_tf_singlepair(iidA, iidB, maxlength=3)
+        tf_suggest = get_suggest_transforms(result)
+        for transform_np in tf_suggest[:3]:
+            t_B_to_A = transform.PerspectiveTransform(transform_np)
             pathA = db.get_img_path_byid(iidA)
             pathB = db.get_img_path_byid(iidB)
             print(pathA)
