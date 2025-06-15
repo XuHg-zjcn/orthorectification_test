@@ -137,20 +137,60 @@ def intersect_matchs_in_db(db):
     print(f'matched {n_total} imgpairs, {n_sucess} sucess, {n_total-n_sucess} failed')
 
 
-def delete_error_match(db):
-    pass
+def update_worst_match(db, maxpoints):
+    imgpairs = db.get_worst_match(maxpoints)  # 不应该在这里添加获取n_points，可能程序运行时改变
+    n_total = len(imgpairs)
+    print(f'need re-matching {n_total} imgpairs')
+    if n_total == 0:
+        return
+    n_update = 0
+    for iidA, iidB in imgpairs:
+        print('===================')
+        tf_old, _, n_points, last_update = db.get_match(iidA, iidB)
+        print(f'{iidA},{iidB}, orignal n_points={n_points}, last_update={last_update}')
+        print(tf_old)
+        pathA = db.get_img_path_byid(iidA)
+        pathB = db.get_img_path_byid(iidB)
+        result = db.get_matchways_more_tf_singlepair(iidB, iidA, maxlength=2)
+        tf_suggest = get_suggest_transforms(result)
+        tf_ests = [tf_old]
+        tf_ests.extend(tf_suggest[:3])
+        updated = False
+        for tf in tf_ests:
+            tf = transform.PerspectiveTransform(tf)
+            im = common.try_func(match_img, pathA, pathB, iidA, iidB, tf)
+            if im is None or im.n_match < 12:
+                print('failed')
+                continue
+            print(f'matched {im.n_match}')
+            if im.n_match >= n_points*1.1:
+                print('replace old match')
+                print(im.H)
+                B_in_A = im.get_poly_B_in_A()
+                A_in_B = im.get_poly_A_in_B()
+                db.insert_replace_match(iidA, iidB, im.H, B_in_A.wkt, im.n_match)
+                db.insert_replace_match(iidB, iidA, im.H.inv(), A_in_B.wkt, im.n_match)
+                n_points = im.n_match
+                db.commit()
+                updated = True
+        if updated:
+            n_update += 1
+    print('===================')
+    print(f'matched {n_total} imgpairs, {n_update}({n_update/n_total:.2%}) updated')
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--intersect_matchs_in_db', action='store_true')
+    parser.add_argument('--update_worst_match', action='store_true')
+    parser.add_argument('--worst_maxpoint', default=100, type=int)
     parser.add_argument('--delete_error_match', action='store_true')
     parser.add_argument('-r', '--recursive', action='store_true')
     parser.add_argument('--intersect_pyproj', action='store_true')
     args = parser.parse_args()
     db = database.Database('data/imagery.db')
-    if args.delete_error_match:
-        delete_error_match(db)
+    if args.update_worst_match:
+        update_worst_match(db, args.worst_maxpoint)
     if args.intersect_matchs_in_db:
         intersect_matchs_in_db(db)
     db.close()

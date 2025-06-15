@@ -331,6 +331,17 @@ class Database:
         result = self.get_matchways_more_tf([pair], maxlength)
         return result[pair]
 
+    def get_worst_match(self, maxpoints):
+        cursor = self.conn.cursor()
+        cursor.execute(
+            'SELECT a_imgid, b_imgid '
+            'FROM matchs '
+            'WHERE a_imgid < b_imgid AND n_points<?'
+            'ORDER BY n_points ASC;',
+            (maxpoints,)
+        )
+        return cursor.fetchall()
+
     def commit(self):
         self.conn.commit()
 
