@@ -95,7 +95,7 @@ def match_img(pathA, pathB, iidA, iidB, estT_B_to_A):
 
 
 def match_imgpair_autoest(db, iidA, iidB):
-    result = db.get_matchways_more_tf_singlepair(iidA, iidB, maxlength=3)
+    result = db.get_matchways_more_tf_singlepair(iidB, iidA, maxlength=3)
     tf_suggest = get_suggest_transforms(result)
     for transform_np in tf_suggest[:3]:
         t_B_to_A = transform.PerspectiveTransform(transform_np)
@@ -107,10 +107,10 @@ def match_imgpair_autoest(db, iidA, iidB):
         im = common.try_func(match_img, pathA, pathB, iidA, iidB, t_B_to_A)
         if im is None or im.H is None:
             print('match failed')
-            return
+            continue
         if im.n_match < 12:
             print(f'{im.n_match} points match, too few')
-            return
+            continue
         print(f'{im.n_match} points match')
         print(im.H)
         B_in_A = im.get_poly_B_in_A()
@@ -132,7 +132,7 @@ def intersect_matchs_in_db(db):
         im = match_imgpair_autoest(db, iidA, iidB)
         if im is not None:
             n_sucess += 1
-            break
+            continue
     print('===================')
     print(f'matched {n_total} imgpairs, {n_sucess} sucess, {n_total-n_sucess} failed')
 
