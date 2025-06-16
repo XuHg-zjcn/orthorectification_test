@@ -27,6 +27,12 @@ import preprocess
 import common
 
 
+def filter_imgpair(pairs):
+    if filter_iid_in_pair is None:
+        return pairs
+    return list(filter(lambda x:(x[0] in filter_iid_in_pair or x[1] in filter_iid_in_pair), pairs))
+
+
 def get_suggest_transforms(lst):
     # TODO: 返回数据来源'avg_filted', 'mid', 'avg', 路径节点序列等
     def generate_out(x, tfs):
@@ -123,6 +129,7 @@ def match_imgpair_autoest(db, iidA, iidB):
 
 def intersect_matchs_in_db(db):
     imgpairs = db.get_imagepairs_need_match()
+    imgpairs = filter_imgpair(imgpairs)
     n_total = len(imgpairs)
     n_sucess = 0
     print(f'found {n_total} imagepairs need matching in database')
@@ -139,6 +146,7 @@ def intersect_matchs_in_db(db):
 
 def update_worst_match(db, maxpoints):
     imgpairs = db.get_worst_match(maxpoints)  # 不应该在这里添加获取n_points，可能程序运行时改变
+    imgpairs = filter_imgpair(imgpairs)
     n_total = len(imgpairs)
     print(f'need re-matching {n_total} imgpairs')
     if n_total == 0:
@@ -187,8 +195,13 @@ if __name__ == '__main__':
     parser.add_argument('--delete_error_match', action='store_true')
     parser.add_argument('-r', '--recursive', action='store_true')
     parser.add_argument('--intersect_pyproj', action='store_true')
+    parser.add_argument('--filter_iid_in_pair', default=None, type=str)
     args = parser.parse_args()
     db = database.Database('data/imagery.db')
+    if args.filter_iid_in_pair is not None:
+        filter_iid_in_pair = set(map(lambda x:int(x), args.filter_iid_in_pair.split(',')))
+    else:
+        filter_iid_in_pair = None
     if args.update_worst_match:
         update_worst_match(db, args.worst_maxpoint)
     if args.intersect_matchs_in_db:
