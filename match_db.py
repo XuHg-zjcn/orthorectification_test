@@ -26,12 +26,42 @@ import transform
 import preprocess
 import common
 
+# 全局变量
+filter_iid_in_pair = None
+pol = None
 
 def filter_imgpair(pairs):
     if filter_iid_in_pair is None:
         return pairs
     return list(filter(lambda x:(x[0] in filter_iid_in_pair or x[1] in filter_iid_in_pair), pairs))
 
+def args_to_pol(args):
+    extCoef = args.extCoef
+    extMin = args.extMin
+    nX = args.nX
+    maxpixel = args.maxpixel
+    w_Laplace = args.w_Laplace
+    w_Roberts = args.w_Roberts
+    w_Sobel = args.w_Sobel
+    pol = [
+        preprocess.AutoCutEstTf('A', extCoef=extCoef, extMin=extMin*nX),
+        preprocess.AutoCutEstTf('B', extCoef=extCoef, extMin=extMin*nX),
+        preprocess.AutoZoomEstTf('A', nX=nX),
+        preprocess.AutoZoom('A', maxpixel=maxpixel*nX**2),
+        preprocess.AutoZoomEstTf('B', nX=nX),
+        preprocess.AutoZoom('B', maxpixel=maxpixel*nX**2),
+        preprocess.CutBlackTopBottom('A'),
+        preprocess.CutBlackLeftRight('A'),
+        preprocess.EdgeDetection('A', w_Laplace=w_Laplace, w_Roberts=w_Roberts, w_Sobel=w_Sobel),
+        preprocess.DilateAndDownsamp('A', nz=nX),
+        preprocess.CutBlackTopBottom('B'),
+        preprocess.CutBlackLeftRight('B'),
+        preprocess.EdgeDetection('B', w_Laplace=w_Laplace, w_Roberts=w_Roberts, w_Sobel=w_Sobel),
+        preprocess.DilateAndDownsamp('B', nz=nX),
+        preprocess.AutoCutEstTf('A', extCoef=extCoef, extMin=extMin),
+        preprocess.AutoCutEstTf('B', extCoef=extCoef, extMin=extMin)
+    ]
+    return pol
 
 def get_suggest_transforms(lst):
     # TODO: 返回数据来源'avg_filted', 'mid', 'avg', 路径节点序列等
@@ -71,26 +101,8 @@ def match_img(pathA, pathB, iidA, iidB, estT_B_to_A):
     ivA = ImgView(dsA.GetRasterBand(1))
     ivB = ImgView(dsB.GetRasterBand(1))
     im = ImgMatch(ivA, ivB)
-    im.append_pobj(preprocess.AutoCutEstTf('A', estT_B_to_A, extCoef=0, extMin=100))
-    im.append_pobj(preprocess.AutoCutEstTf('B', estT_B_to_A, extCoef=0, extMin=100))
-    im.append_pobj(preprocess.AutoZoomEstTf('A', estT_B_to_A, nX=8))
-    im.append_pobj(preprocess.AutoZoom('A', maxpixel=1e6*8**2))
-    im.append_pobj(preprocess.AutoZoomEstTf('B', estT_B_to_A, nX=8))
-    im.append_pobj(preprocess.AutoZoom('B', maxpixel=1e6*8**2))
-    if im.imgA.shape[0]*im.imgA.shape[1] < 1e6:
-        return
-    if im.imgB.shape[0]*im.imgB.shape[1] < 1e6:
-        return
-    im.append_pobj(preprocess.CutBlackTopBottom('A'))
-    im.append_pobj(preprocess.CutBlackLeftRight('A'))
-    im.append_pobj(preprocess.EdgeDetection('A'))
-    im.append_pobj(preprocess.DilateAndDownsamp('A', nz=8))
-    im.append_pobj(preprocess.CutBlackTopBottom('B'))
-    im.append_pobj(preprocess.CutBlackLeftRight('B'))
-    im.append_pobj(preprocess.EdgeDetection('B'))
-    im.append_pobj(preprocess.DilateAndDownsamp('B', nz=8))
-    im.append_pobj(preprocess.AutoCutEstTf('A', estT_B_to_A, extCoef=0, extMin=10))
-    im.append_pobj(preprocess.AutoCutEstTf('B', estT_B_to_A, extCoef=0, extMin=10))
+    im.set_estT(estT_B_to_A)
+    im.setPreprocessObjectList(pol)
     im.setParam_compare(
         outpath_match=f'data/match_db_{iidA}_{iidB}.jpg',
         maxpoints1=5000,
@@ -196,8 +208,17 @@ if __name__ == '__main__':
     parser.add_argument('-r', '--recursive', action='store_true')
     parser.add_argument('--intersect_pyproj', action='store_true')
     parser.add_argument('--filter_iid_in_pair', default=None, type=str)
+    # preprocess setting
+    parser.add_argument('--extCoef', default=0.1, type=float)
+    parser.add_argument('--extMin', default=10, type=int)
+    parser.add_argument('--nX', default=8, type=int)
+    parser.add_argument('--maxpixel', default=1e6, type=float)
+    parser.add_argument('-wL', '--w_Laplace', default=1.0, type=float)
+    parser.add_argument('-wR', '--w_Roberts', default=1.414, type=float)
+    parser.add_argument('-wS', '--w_Sobel', default=0.53, type=float)
     args = parser.parse_args()
     db = database.Database('data/imagery.db')
+    pol = args_to_pol(args)
     if args.filter_iid_in_pair is not None:
         filter_iid_in_pair = set(map(lambda x:int(x), args.filter_iid_in_pair.split(',')))
     else:

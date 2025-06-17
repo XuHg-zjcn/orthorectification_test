@@ -30,21 +30,30 @@ class ImgMatch:
         self.imgB = imgB
         self.pol = []     # 预处理对象列表(Preprocess Object List)
         self.cp = None    # 对比参数(Compare Param)
+        self.estT = None
         self.H = None
         self.n_match = 0
 
     def append_pobj(self, x):
         self.pol.append(x)
 
+    def setPreprocessObjectList(self, pol):
+        self.pol = pol
+
+    def set_estT(self, estT):
+        self.estT = estT
+
     def setParam_compare(self, *args, **kwargs):
         self.cp = (args, kwargs)
 
     def match(self):
         # TODO: 暂存预处理后的数据
+        # TODO: 不应该用字典作为预处理参数，而是self对象
         dict_ = {'imgA':self.imgA,
                  'imgB':self.imgB,
                  'tA':KeepTransform(),
-                 'tB':KeepTransform()}
+                 'tB':KeepTransform(),
+                 'estT':self.estT}
         for pobj in self.pol:
             dict_ = pobj.process(dict_)
         imgA_ = dict_['imgA']

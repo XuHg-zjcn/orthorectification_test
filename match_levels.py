@@ -72,8 +72,9 @@ def compare_to(
     dsB = gdal.Open(pathB, gdal.GA_ReadOnly)
     ivB = ImgView(dsB.GetRasterBand(1))
     im = ImgMatch(imgA_, ivB)
-    im.append_pobj(preprocess.AutoCutEstTf('A', estH_B_to_Ap, extCoef, extMin))
-    im.append_pobj(preprocess.AutoZoomEstTf('B', estH_B_to_Ap, nX=8))
+    im.set_estT(estH_B_to_Ap)
+    im.append_pobj(preprocess.AutoCutEstTf('A', extCoef, extMin))
+    im.append_pobj(preprocess.AutoZoomEstTf('B', nX=8))
     im.append_pobj(preprocess.AutoZoom('B', predown=1))  #其实为了ImgView转numpy array
     im.append_pobj(preprocess.EdgeDetection('B'))
     im.append_pobj(preprocess.DilateAndDownsamp('B', nz=8))

@@ -51,16 +51,16 @@ class PreprocessSingle(Preprocess):
 
 
 class PreprocessWithEstTf(Preprocess):
-    def __init__(self, imgname, estT):
+    def __init__(self, imgname):
         self.imgname = imgname
-        self.estT = estT  # 最初的imgB到imgA的坐标变换
 
     def process(self, dict_):
         imgA = dict_['imgA']
         imgB = dict_['imgB']
         tA = dict_['tA']
         tB = dict_['tB']
-        estT_curr = tA.inv().fog(self.estT).fog(tB)
+        estT = dict_['estT']
+        estT_curr = tA.inv().fog(estT).fog(tB)
         if self.imgname == 'A':  #裁剪当前的imgA
             imgA, t_ = self.process_img(imgA, imgB.shape, estT_curr)
             tA = tA.fog(t_)
@@ -288,8 +288,8 @@ class CutBlackLeftRight(PreprocessSingle):
 
 
 class AutoCutEstTf(PreprocessWithEstTf):
-    def __init__(self, imgname, estT, extCoef=0, extMin=0):
-        super().__init__(imgname, estT)
+    def __init__(self, imgname, extCoef=0, extMin=0):
+        super().__init__(imgname)
         self.extCoef = extCoef  # 扩展系数
         self.extMin = extMin    # 最小扩展宽度
 
@@ -319,8 +319,8 @@ class AutoCutEstTf(PreprocessWithEstTf):
 
 
 class AutoZoomEstTf(PreprocessWithEstTf):
-    def __init__(self, imgname, estT, nX=1):
-        super().__init__(imgname, estT)
+    def __init__(self, imgname, nX=1):
+        super().__init__(imgname)
         self.nX = nX  # 为后续变换预留
 
     def process_img(self, img, other_shape, estT):
