@@ -30,6 +30,7 @@ import common
 # 全局变量
 filter_iid_in_pair = None
 pseq = None
+args = None
 
 def filter_imgpair(pairs):
     if filter_iid_in_pair is None:
@@ -78,15 +79,15 @@ def match_img(pathA, pathB, iidA, iidB, estT_B_to_A):
     im.setPreprocessSeq(pseq)
     im.setParam_compare(
         outpath_match=f'data/match_db_{iidA}_{iidB}.jpg',
-        maxpoints1=5000,
-        maxpoints2=5000,
-        threshold_m1m2_ratio=0.85)
+        maxpoints1=args.maxpoint_sift,
+        maxpoints2=args.maxpoint_sift,
+        threshold_m1m2_ratio=args.threshold_m1m2_ratio)
     pt, n_match = im.match()
     return im
 
 
 def match_imgpair_autoest(db, iidA, iidB):
-    result = db.get_matchways_more_tf_singlepair(iidB, iidA, maxlength=3)
+    result = db.get_matchways_more_tf_singlepair(iidB, iidA, maxlength=args.matchway_maxlen)
     tf_suggest = get_suggest_transforms(result)
     for transform_np in tf_suggest[:3]:
         t_B_to_A = transform.PerspectiveTransform(transform_np)
@@ -99,7 +100,7 @@ def match_imgpair_autoest(db, iidA, iidB):
         if im is None or im.H is None:
             print('match failed')
             continue
-        if im.n_match < 12:
+        if im.n_match < args.minmatch:
             print(f'{im.n_match} points match, too few')
             continue
         print(f'{im.n_match} points match')
@@ -144,7 +145,7 @@ def update_worst_match(db, maxpoints):
         print(tf_old)
         pathA = db.get_img_path_byid(iidA)
         pathB = db.get_img_path_byid(iidB)
-        result = db.get_matchways_more_tf_singlepair(iidB, iidA, maxlength=2)
+        result = db.get_matchways_more_tf_singlepair(iidB, iidA, maxlength=args.matchway_maxlen)
         tf_suggest = get_suggest_transforms(result)
         tf_ests = [tf_old]
         tf_ests.extend(tf_suggest[:3])
@@ -152,7 +153,7 @@ def update_worst_match(db, maxpoints):
         for tf in tf_ests:
             tf = transform.PerspectiveTransform(tf)
             im = common.try_func(match_img, pathA, pathB, iidA, iidB, tf)
-            if im is None or im.n_match < 12:
+            if im is None or im.n_match < args.minmatch:
                 print('failed')
                 continue
             print(f'matched {im.n_match}')
@@ -189,6 +190,11 @@ if __name__ == '__main__':
     parser.add_argument('-wL', '--w_Laplace', default=1.0, type=float)
     parser.add_argument('-wR', '--w_Roberts', default=1.414, type=float)
     parser.add_argument('-wS', '--w_Sobel', default=0.53, type=float)
+    # matching setting
+    parser.add_argument('--matchway_maxlen', default=3, type=int)
+    parser.add_argument('--maxpoint_sift', default=5000, type=int)
+    parser.add_argument('--threshold_m1m2_ratio', default=0.85, type=float)
+    parser.add_argument('--minmatch', default=12, type=int)
     args = parser.parse_args()
     db = database.Database('data/imagery.db')
     pseq = PreprocessWithEst.params_from_dict(vars(args), raise_unknown=False)
