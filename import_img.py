@@ -25,7 +25,7 @@ import database
 import khseries_corners
 import metadata
 
-pattern_kh = r'^D\d?[A-Z]{0,2}\d{4}-\d+[A-Z]\d+'
+pattern_kh = r'^D\d?[A-Z]{0,2}\d{4}-\d+[A-Z]+\d+'
 pattern_spot = r'\d{3}-\d{3}_S\d_\d{3}-\d{3}-\d_\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2}_\w+-\d_\w_\w{2}_\w{2}'
 
 

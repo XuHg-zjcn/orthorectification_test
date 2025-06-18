@@ -67,6 +67,9 @@ def get_shapely_polygon(d):
                 ('NE Corner Lat dec', 'NE Corner Long dec'),
                 ('SE Corner Lat dec', 'SE Corner Long dec'),
                 ('SW Corner Lat dec', 'SW Corner Long dec')]
+    if 'NW Cormer Lat dec' in d and 'NW Corner Lat dec' not in d:
+        # Declass 1元数据有拼写错误
+        d['NW Corner Lat dec'] = d['NW Cormer Lat dec']
     points = list(map(lambda x:(d[x[1]],d[x[0]]), name_lst))
     return shapely.polygons(points)
 
