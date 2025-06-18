@@ -23,6 +23,7 @@ from osgeo import gdal
 import numpy as np
 import shapely
 import preprocess
+from preprocess_seq import PreprocessNoEst
 from metadata import read_metadata
 from imgmatch import create_rb3dview
 import database
@@ -163,27 +164,8 @@ if __name__ == '__main__':
         im.append_pobj(preprocess.CutImg('A', czA))
         im.append_pobj(preprocess.CutImg('B', czB))
 
-    maxpixelA = opt_A['maxpixel_sift']
-    if opt_A['laplace']:
-        maxpixelA *= opt_A['dilsize']**2
-    im.append_pobj(preprocess.AutoZoom('A', maxpixel=maxpixelA))
-    if opt_A['laplace']:
-        im.append_pobj(preprocess.LaplacianAndDilate('A', nz=opt_A['dilsize']))
-    if opt_A['cutblack_topbottom']:
-        im.append_pobj(preprocess.CutBlackTopBottom('A'))
-    if opt_A['cutblack_leftright']:
-        im.append_pobj(preprocess.CutBlackLeftRight('A'))
-
-    maxpixelB = opt_B['maxpixel_sift']
-    if opt_B['laplace']:
-        maxpixelB *= opt_B['dilsize']**2
-    im.append_pobj(preprocess.AutoZoom('B', maxpixel=maxpixelB))
-    if opt_B['laplace']:
-        im.append_pobj(preprocess.LaplacianAndDilate('B', nz=opt_B['dilsize']))
-    if opt_B['cutblack_topbottom']:
-        im.append_pobj(preprocess.CutBlackTopBottom('B'))
-    if opt_B['cutblack_leftright']:
-        im.append_pobj(preprocess.CutBlackLeftRight('B'))
+    pseq = PreprocessNoEst.params_from_3dict(opt_A, opt_B, {}, raise_unknown=False)
+    im.setPreprocessSeq(pseq)
     im.setParam_compare(outpath_match=opts['imgMatch'],
                         maxpoints1=opt_A['maxpoint_sift'],
                         maxpoints2=opt_B['maxpoint_sift'],

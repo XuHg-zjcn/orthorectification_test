@@ -22,7 +22,7 @@ from osgeo import gdal
 import database
 import import_img
 from imgview import ImgView
-import preprocess
+from preprocess_seq import PreprocessPart
 from imgmatch2 import ImgMatch
 from common import CropZoom2D
 
@@ -61,10 +61,7 @@ if __name__ == '__main__':
             im = ImgMatch(ivA, ivB)
             czA = CropZoom2D.with_shape(ivA.shape)[::2, -3000::2]
             czB = CropZoom2D.with_shape(ivB.shape)[::2, :3000:2]
-            im.append_pobj(preprocess.CutImg('A', czA))
-            im.append_pobj(preprocess.AutoZoom('A', predown=1))
-            im.append_pobj(preprocess.CutImg('B', czB))
-            im.append_pobj(preprocess.AutoZoom('B',predown=1))
+            im.setPreprocessSeq(PreprocessPart(A_cut=czA, B_cut=czB))
             im.setParam_compare(outpath_match=f'data/match_{iidA}_{iidB}.jpg',
                                 maxpoints1=5000, maxpoints2=5000,
                                 threshold_m1m2_ratio=0.8)

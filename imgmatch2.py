@@ -28,7 +28,7 @@ class ImgMatch:
     def __init__(self, imgA, imgB):
         self.imgA = imgA  # imgA, imgB可以是np.ndarray或ImgView类型
         self.imgB = imgB
-        self.pol = []     # 预处理对象列表(Preprocess Object List)
+        self.pseq = []    # 预处理序列(PreprocessSeq子类的对象)
         self.cp = None    # 对比参数(Compare Param)
         self.estT = None
         self.H = None
@@ -37,8 +37,8 @@ class ImgMatch:
     def append_pobj(self, x):
         self.pol.append(x)
 
-    def setPreprocessObjectList(self, pol):
-        self.pol = pol
+    def setPreprocessSeq(self, pseq):
+        self.pseq = pseq
 
     def set_estT(self, estT):
         self.estT = estT
@@ -54,8 +54,7 @@ class ImgMatch:
                  'tA':KeepTransform(),
                  'tB':KeepTransform(),
                  'estT':self.estT}
-        for pobj in self.pol:
-            dict_ = pobj.process(dict_)
+        dict_ = self.pseq.process(dict_)
         imgA_ = dict_['imgA']
         imgB_ = dict_['imgB']
         tA = dict_['tA']

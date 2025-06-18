@@ -28,6 +28,7 @@ import database
 import import_img
 from common import shapely_perspective, findPerspective, try_func, CropZoom2D
 import preprocess
+from preprocess_seq import PreprocessLevels
 from imgmatch2 import ImgMatch
 from imgview import ImgView
 from transform import MoveZoomTransform
@@ -73,13 +74,7 @@ def compare_to(
     ivB = ImgView(dsB.GetRasterBand(1))
     im = ImgMatch(imgA_, ivB)
     im.set_estT(estH_B_to_Ap)
-    im.append_pobj(preprocess.AutoCutEstTf('A', extCoef, extMin))
-    im.append_pobj(preprocess.AutoZoomEstTf('B', nX=8))
-    im.append_pobj(preprocess.AutoZoom('B', predown=1))  #其实为了ImgView转numpy array
-    im.append_pobj(preprocess.EdgeDetection('B'))
-    im.append_pobj(preprocess.DilateAndDownsamp('B', nz=8))
-    im.append_pobj(preprocess.CutBlackTopBottom('B'))
-    im.append_pobj(preprocess.CutBlackLeftRight('B'))
+    im.setPreprocessSeq(PreprocessLevels(A_extCoef=extCoef, A_extMin=extMin, B_nX=8))
     im.setParam_compare(
         outpath_match=f'data/match_levels_{name}.jpg',
         maxpoints1=maxpointA,

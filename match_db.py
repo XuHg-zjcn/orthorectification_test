@@ -24,44 +24,17 @@ from imgview import ImgView
 from imgmatch2 import ImgMatch
 import transform
 import preprocess
+from preprocess_seq import PreprocessWithEst
 import common
 
 # 全局变量
 filter_iid_in_pair = None
-pol = None
+pseq = None
 
 def filter_imgpair(pairs):
     if filter_iid_in_pair is None:
         return pairs
     return list(filter(lambda x:(x[0] in filter_iid_in_pair or x[1] in filter_iid_in_pair), pairs))
-
-def args_to_pol(args):
-    extCoef = args.extCoef
-    extMin = args.extMin
-    nX = args.nX
-    maxpixel = args.maxpixel
-    w_Laplace = args.w_Laplace
-    w_Roberts = args.w_Roberts
-    w_Sobel = args.w_Sobel
-    pol = [
-        preprocess.AutoCutEstTf('A', extCoef=extCoef, extMin=extMin*nX),
-        preprocess.AutoCutEstTf('B', extCoef=extCoef, extMin=extMin*nX),
-        preprocess.AutoZoomEstTf('A', nX=nX),
-        preprocess.AutoZoom('A', maxpixel=maxpixel*nX**2),
-        preprocess.AutoZoomEstTf('B', nX=nX),
-        preprocess.AutoZoom('B', maxpixel=maxpixel*nX**2),
-        preprocess.CutBlackTopBottom('A'),
-        preprocess.CutBlackLeftRight('A'),
-        preprocess.EdgeDetection('A', w_Laplace=w_Laplace, w_Roberts=w_Roberts, w_Sobel=w_Sobel),
-        preprocess.DilateAndDownsamp('A', nz=nX),
-        preprocess.CutBlackTopBottom('B'),
-        preprocess.CutBlackLeftRight('B'),
-        preprocess.EdgeDetection('B', w_Laplace=w_Laplace, w_Roberts=w_Roberts, w_Sobel=w_Sobel),
-        preprocess.DilateAndDownsamp('B', nz=nX),
-        preprocess.AutoCutEstTf('A', extCoef=extCoef, extMin=extMin),
-        preprocess.AutoCutEstTf('B', extCoef=extCoef, extMin=extMin)
-    ]
-    return pol
 
 def get_suggest_transforms(lst):
     # TODO: 返回数据来源'avg_filted', 'mid', 'avg', 路径节点序列等
@@ -102,7 +75,7 @@ def match_img(pathA, pathB, iidA, iidB, estT_B_to_A):
     ivB = ImgView(dsB.GetRasterBand(1))
     im = ImgMatch(ivA, ivB)
     im.set_estT(estT_B_to_A)
-    im.setPreprocessObjectList(pol)
+    im.setPreprocessSeq(pseq)
     im.setParam_compare(
         outpath_match=f'data/match_db_{iidA}_{iidB}.jpg',
         maxpoints1=5000,
@@ -218,7 +191,7 @@ if __name__ == '__main__':
     parser.add_argument('-wS', '--w_Sobel', default=0.53, type=float)
     args = parser.parse_args()
     db = database.Database('data/imagery.db')
-    pol = args_to_pol(args)
+    pseq = PreprocessWithEst.params_from_dict(vars(args), raise_unknown=False)
     if args.filter_iid_in_pair is not None:
         filter_iid_in_pair = set(map(lambda x:int(x), args.filter_iid_in_pair.split(',')))
     else:
