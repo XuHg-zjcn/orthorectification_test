@@ -41,12 +41,13 @@ def fix_heavy_errs(delta_x):
             groups.append(curr_group)
         return groups
 
+    len_seg = (delta_x.shape[0]+2)//4  # delta_x已经过vaild卷积，长度减少了2
     seg_std = []  # 分段标准差
     lst_err = []
     for i in range(4):
-        begin_delta_x = i*1500  # 1500是经验值，大多数delta_x看起来都分成等长四段
-        seg_delta_x = delta_x[i*1500:(i+1)*1500]
-        seg_delta_x_noedge = delta_x[i*1500:(i+1)*1500-2]
+        begin_delta_x = i*len_seg  # 大多数delta_x看起来都分成等长四段
+        seg_delta_x = delta_x[i*len_seg:(i+1)*len_seg]
+        seg_delta_x_noedge = delta_x[i*len_seg:(i+1)*len_seg-2]
         std = seg_delta_x_noedge.std()
         seg_std.append(std)
         where = np.where(np.abs(seg_delta_x)/std > 5)[0]
@@ -71,14 +72,7 @@ def fix_heavy_errs(delta_x):
         fix_i.append(i_argmax)
     return fix_i
 
-
-if __name__ == '__main__':
-    path_in = sys.argv[1]
-    path_out = sys.argv[2]
-    ds = gdal.Open(path_in, gdal.GA_ReadOnly)
-    band = ds.GetRasterBand(1)
-    img = band.ReadAsArray()
-    print(img)
+def process_band(img):
     img -= img.min()
     img_i16 = img.astype(np.int16)*2
     mean_y = np.mean(img_i16, axis=1) # 计算每一行的平均值
@@ -87,22 +81,26 @@ if __name__ == '__main__':
     delta_x = np.convolve(mean_x, [-0.5, 1, -0.5], 'vaild')
     fix_i = fix_heavy_errs(delta_x)
     print(fix_i)
-    #plt.plot(delta_x) # 看起来分四段方差不同的区间
-    #plt.plot(np.convolve(np.mean(img_i16[1500], axis=1), [-0.5, 1, -0.5], 'vaild')) # 看起来X上各区间在Y没有差异
-    #plt.plot(np.convolve(np.mean(img_i16[1500:3000], axis=1), [-0.5, 1, -0.5], 'vaild'))
-    #plt.plot(np.convolve(np.mean(img_i16[3000:4500], axis=1), [-0.5, 1, -0.5], 'vaild'))
-    #plt.plot(np.convolve(np.mean(img_i16[4500:], axis=1), [-0.5, 1, -0.5], 'vaild'))
-    #plt.show()
     img_i16[1:-1] -= np.round(delta_y/2).astype(np.int16).reshape((-1, 1))
     img_i16[:, 1:-1] -= np.round(delta_x/2).astype(np.int16).reshape((1, -1))
     img_i16 -= img_i16.min()
     img_u8 = np.clip(img_i16, 0, 255).astype(np.uint8)
+    return img_u8
 
+
+if __name__ == '__main__':
+    path_in = sys.argv[1]
+    path_out = sys.argv[2]
+    ds = gdal.Open(path_in, gdal.GA_ReadOnly)
     # ref: https://gis.stackexchange.com/questions/164853/reading-modifying-and-writing-a-geotiff-with-gdal-in-python
     driver = gdal.GetDriverByName("GTiff")
-    outdata = driver.Create(path_out, ds.RasterXSize, ds.RasterYSize, 1, gdal.GDT_Byte)
+    outdata = driver.Create(path_out, ds.RasterXSize, ds.RasterYSize, ds.RasterCount, gdal.GDT_Byte)
     outdata.SetGeoTransform(ds.GetGeoTransform())
     outdata.SetProjection(ds.GetProjection())
     outdata.SetGCPs(ds.GetGCPs(), ds.GetGCPProjection())
-    outdata.GetRasterBand(1).WriteArray(img_u8)
+    for i in range(1, ds.RasterCount+1):
+        band = ds.GetRasterBand(i)
+        img = band.ReadAsArray()
+        img_processed = process_band(img)
+        outdata.GetRasterBand(i).WriteArray(img_processed)
     outdata.Close()
