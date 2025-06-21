@@ -34,9 +34,6 @@ class ImgMatch:
         self.H = None
         self.n_match = 0
 
-    def append_pobj(self, x):
-        self.pol.append(x)
-
     def setPreprocessSeq(self, pseq):
         self.pseq = pseq
 

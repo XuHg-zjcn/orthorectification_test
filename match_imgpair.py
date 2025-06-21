@@ -143,26 +143,7 @@ if __name__ == '__main__':
     if paraA is not None and paraB is not None:
         hasMetadata = True
         Hx = np.matmul(np.linalg.inv(paraA[1]), paraB[1])
-        print('estimated perspective matrix by metadata:\n', Hx)  # 估计原图的透视矩阵
-        bbox_at_coordA = preprocess.perspective_boundingbox(
-            Hx,
-            ivA.shape[1], ivA.shape[0],
-            ivB.shape[1], ivB.shape[0])
-        print(bbox_at_coordA)
-        bbox_at_coordB = preprocess.perspective_boundingbox(
-            np.linalg.inv(Hx),
-            ivB.shape[1], ivB.shape[0],
-            ivA.shape[1], ivA.shape[0])
-        print(bbox_at_coordB)
-
-        czA = CropZoom2D.with_shape(ivA.shape,
-            x0=bbox_at_coordA[0],y0=bbox_at_coordA[1],
-            x1=bbox_at_coordA[2],y1=bbox_at_coordA[3])
-        czB = CropZoom2D.with_shape(ivB.shape,
-            x0=bbox_at_coordB[0],y0=bbox_at_coordB[1],
-            x1=bbox_at_coordB[2],y1=bbox_at_coordB[3])
-        im.append_pobj(preprocess.CutImg('A', czA))
-        im.append_pobj(preprocess.CutImg('B', czB))
+        im.set_estT(Hx)  # TODO: 使用该估计
 
     pseq = PreprocessNoEst.params_from_3dict(opt_A, opt_B, {}, raise_unknown=False)
     im.setPreprocessSeq(pseq)
