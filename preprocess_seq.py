@@ -87,8 +87,8 @@ class PreprocessSeq(ABC):
 # 在`match_db.py`使用
 class PreprocessWithEst(PreprocessSeq):
     def _build(self,
-            A_extCoef=0.1, A_extMin=10, A_nX=8, A_maxpixel=1e6,
-            B_extCoef=0.1, B_extMin=10, B_nX=8, B_maxpixel=1e6,
+            A_extCoef=0.1, A_extMin=10, A_nX=8, A_maxpixel=1e6, A_predown=0,
+            B_extCoef=0.1, B_extMin=10, B_nX=8, B_maxpixel=1e6, B_predown=0,
             A_cutblack_topbottom=True, A_cutblack_leftright=True,
             B_cutblack_topbottom=True, B_cutblack_leftright=True,
             w_Laplace=1.0, w_Roberts=1.414, w_Sobel=0.53):
@@ -96,10 +96,11 @@ class PreprocessWithEst(PreprocessSeq):
         # 预先裁剪和缩放
         lst.append(AutoCutEstTf('A', extCoef=A_extCoef, extMin=A_extMin*A_nX))
         lst.append(AutoCutEstTf('B', extCoef=B_extCoef, extMin=B_extMin*B_nX))
-        lst.append(AutoZoomEstTf('A', nX=A_nX))
-        lst.append(AutoZoom('A', maxpixel=A_maxpixel*A_nX**2))
-        lst.append(AutoZoomEstTf('B', nX=B_nX))
-        lst.append(AutoZoom('B', maxpixel=B_maxpixel*B_nX**2))
+        lst.append(AutoZoom('A', maxpixel=A_maxpixel*A_nX**2, predown=A_predown))  # 此处会转成numpy数组
+        lst.append(AutoZoom('B', maxpixel=B_maxpixel*B_nX**2, predown=B_predown))
+        lst.append(AutoZoomEstTf('A', nX=A_nX/B_nX))  # 此处nX是保留倍率
+        lst.append(AutoZoomEstTf('B', nX=B_nX/A_nX))
+        # TODO: 先估计缩放倍率再转换成numpy数组
         # 处理A
         if A_cutblack_topbottom:
             lst.append(CutBlackTopBottom('A'))
@@ -122,8 +123,8 @@ class PreprocessWithEst(PreprocessSeq):
 # 在`match_imgpair.py`使用
 class PreprocessNoEst(PreprocessSeq):
     def _build(self,
-            A_extCoef=0.1, A_extMin=10, A_laplace=False, A_dilsize=8, A_maxpixel=1e7, A_predown=0,
-            B_extCoef=0.1, B_extMin=10, B_laplace=False, B_dilsize=8, B_maxpixel=1e7, B_predown=0,
+            A_laplace=False, A_dilsize=8, A_maxpixel=1e7, A_predown=0,
+            B_laplace=False, B_dilsize=8, B_maxpixel=1e7, B_predown=0,
             A_cutblack_topbottom=False, A_cutblack_leftright=False,
             B_cutblack_topbottom=False, B_cutblack_leftright=False):
         lst = []

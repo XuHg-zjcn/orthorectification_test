@@ -401,5 +401,4 @@ class PerspectiveTransform(AffineTransform):  # 透视变换
 
     def nz_at(self, x, y):
         alpha = self[2,0]*x + self[2,1]*y + self[2,2]
-        ratio = 1/np.sqrt(np.sum((self[:2,:2]/alpha)**2)/2)
-        return np.sqrt(np.sum(np.array(self[:2,:2])**2)/2)
+        return np.sqrt(np.sum((np.array(self[:2,:2])/alpha)**2)/2)
