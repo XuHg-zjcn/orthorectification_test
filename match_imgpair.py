@@ -151,9 +151,10 @@ if __name__ == '__main__':
                         maxpoints1=opt_A['maxpoint_sift'],
                         maxpoints2=opt_B['maxpoint_sift'],
                         threshold_m1m2_ratio=opts['threshold_m1m2_ratio'])
-    H_orig, n_match = im.match()
+    H_orig, n_match, iters = im.match_iter()
     if H_orig is None:
         print('match failed')
+    print(f'{n_match} match points, {iters} iters')
     print('mearused perspective matrix:\n', H_orig)
     if n_match < opts['minmatch']:
         print('too few match keypoint pairs')
