@@ -55,6 +55,7 @@ def parser_options():
         'dilsize=',
         'maxpix_sift=',
         'maxpixel_sift=',
+        'maxpixel=',
         'maxpoint_sift=',
         'threshold_m1m2_ratio=',
         'cutblack_topbottom',
@@ -68,7 +69,8 @@ def parser_options():
         'b':'imgB',
         '3':'img3D',
         'm':'imgMatch',
-        'maxpix_sift':'maxpixel_sift'
+        'maxpix_sift':'maxpixel',
+        'maxpixel_sift':'maxpixel',
     }
     opts = {
         'imgA':None,
@@ -84,7 +86,7 @@ def parser_options():
         'predown':0,
         'detEdge':False,
         'dilsize':8,
-        'maxpixel_sift':1e7,
+        'maxpixel':1e7,
         'maxpoint_sift':10000,
         'cutblack_topbottom':False,
         'cutblack_leftright':False}
