@@ -342,6 +342,17 @@ class Database:
         )
         return cursor.fetchall()
 
+    def get_all_image_iid(self):
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT id FROM images");
+        iid_list = list(map(lambda x:x[0], cursor))
+        return iid_list
+
+    def get_all_match_iidpair(self):
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT a_imgid, b_imgid FROM matchs");
+        return cursor.fetchall()
+
     def commit(self):
         self.conn.commit()
 
