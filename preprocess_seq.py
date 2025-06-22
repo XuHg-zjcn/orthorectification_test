@@ -111,6 +111,7 @@ class PreprocessNoEst(PreprocessSeq):
         if B_detEdge:
             B_maxpixel *= B_dilsize**2
         lst.append(AutoZoom('A', maxpixel=A_maxpixel, predown=A_predown))
+        lst.append(ConvertToNumpyArray('A'))
         if A_cutblack_topbottom:
             lst.append(CutBlackTopBottom('A'))
         if A_cutblack_leftright:
@@ -120,6 +121,7 @@ class PreprocessNoEst(PreprocessSeq):
             lst.append(DilateAndDownsamp('A', nz=A_dilsize))
 
         lst.append(AutoZoom('B', maxpixel=B_maxpixel, predown=B_predown))
+        lst.append(ConvertToNumpyArray('B'))
         if B_cutblack_topbottom:
             lst.append(CutBlackTopBottom('B'))
         if B_cutblack_leftright:
@@ -148,11 +150,10 @@ class PreprocessWithEst(PreprocessNoEst):
         # 预先裁剪和缩放
         lst.append(AutoCutEstTf('A', extCoef=A_extCoef, extMin=A_extMin))
         lst.append(AutoCutEstTf('B', extCoef=B_extCoef, extMin=B_extMin))
-        lst.append(AutoZoom('A', maxpixel=A_maxpixel, predown=A_predown))  # 此处会转成numpy数组
+        lst.append(AutoZoom('A', maxpixel=A_maxpixel, predown=A_predown))
         lst.append(AutoZoom('B', maxpixel=B_maxpixel, predown=B_predown))
-        lst.append(AutoZoomEstTf('A', nX=A_dilsize/B_dilsize))  # 此处nX是保留倍率
+        lst.append(AutoZoomEstTf('A', nX=A_dilsize/B_dilsize))
         lst.append(AutoZoomEstTf('B', nX=B_dilsize/A_dilsize))
-        # TODO: 先估计缩放倍率再转换成numpy数组
         self.lst = lst
         super()._build(A_detEdge=A_detEdge, A_dilsize=A_dilsize, A_predown=1,
                        B_detEdge=B_detEdge, B_dilsize=B_dilsize, B_predown=1, **kwargs)
@@ -167,7 +168,7 @@ class PreprocessLevels(PreprocessSeq):
         # 预先裁剪和缩放
         lst.append(AutoCutEstTf('A', extCoef=A_extCoef, extMin=A_extMin))
         lst.append(AutoZoomEstTf('B', nX=B_nX))
-        lst.append(AutoZoom('B', predown=1))
+        lst.append(ConvertToNumpyArray('B'))
         lst.append(EdgeDetection('B', w_Laplace=w_Laplace, w_Roberts=w_Roberts, w_Sobel=w_Sobel))
         lst.append(DilateAndDownsamp('B', nz=8))
         lst.append(CutBlackTopBottom('B'))
@@ -181,7 +182,7 @@ class PreprocessPart(PreprocessSeq):
         lst = []
         # 预先裁剪和缩放
         lst.append(CutImg('A', A_cut))
-        lst.append(AutoZoom('A', predown=1))
+        lst.append(ConvertToNumpyArray('A'))
         lst.append(CutImg('B', B_cut))
-        lst.append(AutoZoom('B', predown=1))
+        lst.append(ConvertToNumpyArray('B'))
         self.lst = lst

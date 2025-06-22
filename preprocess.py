@@ -128,16 +128,14 @@ def _auto_zoom(img, maxpixel=1e6, predown=None):
         n = 1
     else:
         n = math.ceil(math.sqrt(img.shape[0]*img.shape[1]/maxpixel))
+    if n == 1:
+        return img, n
     if isinstance(img, ImgView):
-        img = img[::n, ::n].trim_scale()
-        img_ = img.get_array()
+        img_ = img[::n, ::n].trim_scale()
         return img_, n
     elif isinstance(img, np.ndarray):
-        if n != 1:
-            img_ = cv2.resize(img, None, None, 1.0/n, 1.0/n, cv2.INTER_AREA)
-            return img_, n
-        else:
-            return img, n
+        img_ = cv2.resize(img, None, None, 1.0/n, 1.0/n, cv2.INTER_AREA)
+        return img_, n
     else:
         raise TypeError(f'unknown type {type(img)}')
 
@@ -172,6 +170,13 @@ class AutoZoom(PreprocessSingle):
         img, n = _auto_zoom(img, self.maxpixel, self.predown)
         mt = MoveZoomTransform(nz=n)
         return img, mt
+
+
+class ConvertToNumpyArray(PreprocessSingle):
+    def process_img(self, img):
+        if isinstance(img, ImgView):
+            img = img.get_array()
+        return img, KeepTransform()
 
 
 class LaplacianAndDilate(PreprocessSingle):

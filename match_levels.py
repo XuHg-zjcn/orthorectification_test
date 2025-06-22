@@ -176,6 +176,8 @@ if __name__ == '__main__':
     dsA = gdal.Open(pathA, gdal.GA_ReadOnly)
     ivA = ImgView(dsA.GetRasterBand(1))
     imgA_, tA = preprocess.AutoZoom('A', predown=args.predownA).process_img(ivA)
+    imgA_, t_ = preprocess.ConvertToNumpyArray('A').process_img(imgA_)
+    tA = tA.fog(t_)
     imgA_, t_ = preprocess.CutBlackTopBottom('A').process_img(imgA_)
     tA = tA.fog(t_)
     imgA_, t_ = preprocess.CutBlackLeftRight('A').process_img(imgA_)
