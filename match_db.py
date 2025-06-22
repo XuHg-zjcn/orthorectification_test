@@ -185,7 +185,7 @@ if __name__ == '__main__':
     # preprocess setting
     parser.add_argument('--extCoef', default=0.1, type=float)
     parser.add_argument('--extMin', default=10, type=int)
-    parser.add_argument('--nX', default=8, type=int)
+    parser.add_argument('--dilsize', default=8, type=int)
     parser.add_argument('--maxpixel', default=1e6, type=float)
     parser.add_argument('-wL', '--w_Laplace', default=1.0, type=float)
     parser.add_argument('-wR', '--w_Roberts', default=1.414, type=float)

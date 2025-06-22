@@ -26,10 +26,24 @@ class PreprocessSeq(ABC):
         return cls.params_from_dict(kwargs)
 
     @classmethod
+    def get_param_names(cls):
+        signature = inspect.signature(cls._build)
+        param_names = set(signature.parameters.keys())
+        cls_ = cls.__base__
+        while True:  # 获取所有基类的`_build`方法签名
+            if hasattr(cls_, '_build'):
+                signature = inspect.signature(cls_._build)
+                param_names.update(set(signature.parameters.keys()))
+            else:
+                break
+            cls_ = cls_.__base__
+        param_names.discard('self')
+        return param_names
+
+    @classmethod
     def params_from_dict(cls, d, raise_unknown=True):
         obj = super().__new__(cls)
-        signature = inspect.signature(obj._build)
-        param_names = signature.parameters.keys()
+        param_names = cls.get_param_names()
         d_param = {}
         for key, value in d.items():
             if key in param_names:
@@ -51,8 +65,7 @@ class PreprocessSeq(ABC):
     @classmethod
     def params_from_3dict(cls, d_A, d_B, d_com, raise_unknown=True):
         obj = super().__new__(cls)
-        signature = inspect.signature(obj._build)
-        param_names = signature.parameters.keys()
+        param_names = cls.get_param_names()
         d_param = {}
         for key, value in d_A.items():
             A_key = 'A_' + key
@@ -80,74 +93,69 @@ class PreprocessSeq(ABC):
         return dict_
 
     @abstractmethod
-    def _build(self, **kwargs):
+    def _build(self):
         pass
-
-
-# 在`match_db.py`使用
-class PreprocessWithEst(PreprocessSeq):
-    def _build(self,
-            A_extCoef=0.1, A_extMin=10, A_nX=8, A_maxpixel=1e6, A_predown=0,
-            B_extCoef=0.1, B_extMin=10, B_nX=8, B_maxpixel=1e6, B_predown=0,
-            A_cutblack_topbottom=True, A_cutblack_leftright=True,
-            B_cutblack_topbottom=True, B_cutblack_leftright=True,
-            w_Laplace=1.0, w_Roberts=1.414, w_Sobel=0.53):
-        lst = []
-        # 预先裁剪和缩放
-        lst.append(AutoCutEstTf('A', extCoef=A_extCoef, extMin=A_extMin*A_nX))
-        lst.append(AutoCutEstTf('B', extCoef=B_extCoef, extMin=B_extMin*B_nX))
-        lst.append(AutoZoom('A', maxpixel=A_maxpixel*A_nX**2, predown=A_predown))  # 此处会转成numpy数组
-        lst.append(AutoZoom('B', maxpixel=B_maxpixel*B_nX**2, predown=B_predown))
-        lst.append(AutoZoomEstTf('A', nX=A_nX/B_nX))  # 此处nX是保留倍率
-        lst.append(AutoZoomEstTf('B', nX=B_nX/A_nX))
-        # TODO: 先估计缩放倍率再转换成numpy数组
-        # 处理A
-        if A_cutblack_topbottom:
-            lst.append(CutBlackTopBottom('A'))
-        if A_cutblack_leftright:
-            lst.append(CutBlackLeftRight('A'))
-        lst.append(EdgeDetection('A', w_Laplace=w_Laplace, w_Roberts=w_Roberts, w_Sobel=w_Sobel))
-        lst.append(DilateAndDownsamp('A', nz=A_nX))
-        # 处理B
-        if B_cutblack_topbottom:
-            lst.append(CutBlackTopBottom('B'))
-        if B_cutblack_leftright:
-            lst.append(CutBlackLeftRight('B'))
-        lst.append(EdgeDetection('B', w_Laplace=w_Laplace, w_Roberts=w_Roberts, w_Sobel=w_Sobel))
-        lst.append(DilateAndDownsamp('B', nz=B_nX))
-        lst.append(AutoCutEstTf('A', extCoef=A_extCoef, extMin=A_extMin))
-        lst.append(AutoCutEstTf('B', extCoef=B_extCoef, extMin=B_extMin))
-        self.lst = lst
 
 
 # 在`match_imgpair.py`使用
 class PreprocessNoEst(PreprocessSeq):
     def _build(self,
-            A_laplace=False, A_dilsize=8, A_maxpixel=1e7, A_predown=0,
-            B_laplace=False, B_dilsize=8, B_maxpixel=1e7, B_predown=0,
-            A_cutblack_topbottom=False, A_cutblack_leftright=False,
-            B_cutblack_topbottom=False, B_cutblack_leftright=False):
+            A_detEdge=False, A_dilsize=8, A_maxpixel=1e7, A_predown=0,
+            B_detEdge=False, B_dilsize=8, B_maxpixel=1e7, B_predown=0,
+            A_cutblack_topbottom=True, A_cutblack_leftright=True,
+            B_cutblack_topbottom=True, B_cutblack_leftright=True,
+            w_Laplace=1.0, w_Roberts=1.414, w_Sobel=0.53):
         lst = []
-        if A_laplace:
+        if A_detEdge:
             A_maxpixel *= A_dilsize**2
+        if B_detEdge:
+            B_maxpixel *= B_dilsize**2
         lst.append(AutoZoom('A', maxpixel=A_maxpixel, predown=A_predown))
         if A_cutblack_topbottom:
             lst.append(CutBlackTopBottom('A'))
         if A_cutblack_leftright:
             lst.append(CutBlackLeftRight('A'))
-        if A_laplace:
-            lst.append(LaplacianAndDilate('A', nz=A_dilsize))
+        if A_detEdge:
+            lst.append(EdgeDetection('A', w_Laplace=w_Laplace, w_Roberts=w_Roberts, w_Sobel=w_Sobel))
+            lst.append(DilateAndDownsamp('A', nz=A_dilsize))
 
-        if B_laplace:
-            B_maxpixel *= B_dilsize**2
         lst.append(AutoZoom('B', maxpixel=B_maxpixel, predown=B_predown))
         if B_cutblack_topbottom:
             lst.append(CutBlackTopBottom('B'))
         if B_cutblack_leftright:
             lst.append(CutBlackLeftRight('B'))
-        if B_laplace:
-            lst.append(LaplacianAndDilate('B', nz=B_dilsize))
+        if B_detEdge:
+            lst.append(EdgeDetection('B', w_Laplace=w_Laplace, w_Roberts=w_Roberts, w_Sobel=w_Sobel))
+            lst.append(DilateAndDownsamp('B', nz=B_dilsize))
+        if hasattr(self, 'lst'):
+            self.lst.extend(lst)
+        else:
+            self.lst = lst
+
+
+# 在`match_db.py`使用
+class PreprocessWithEst(PreprocessNoEst):
+    def _build(self,
+        A_extCoef=0.1, A_extMin=10, A_detEdge=True, A_dilsize=8, A_maxpixel=1e6, A_predown=0,
+        B_extCoef=0.1, B_extMin=10, B_detEdge=True, B_dilsize=8, B_maxpixel=1e6, B_predown=0, **kwargs):
+        if A_detEdge:
+            A_extMin *= A_dilsize
+            A_maxpixel *= A_dilsize**2
+        if B_detEdge:
+            B_extMin *= B_dilsize
+            B_maxpixel *= B_dilsize**2
+        lst = []
+        # 预先裁剪和缩放
+        lst.append(AutoCutEstTf('A', extCoef=A_extCoef, extMin=A_extMin))
+        lst.append(AutoCutEstTf('B', extCoef=B_extCoef, extMin=B_extMin))
+        lst.append(AutoZoom('A', maxpixel=A_maxpixel, predown=A_predown))  # 此处会转成numpy数组
+        lst.append(AutoZoom('B', maxpixel=B_maxpixel, predown=B_predown))
+        lst.append(AutoZoomEstTf('A', nX=A_dilsize/B_dilsize))  # 此处nX是保留倍率
+        lst.append(AutoZoomEstTf('B', nX=B_dilsize/A_dilsize))
+        # TODO: 先估计缩放倍率再转换成numpy数组
         self.lst = lst
+        super()._build(A_detEdge=A_detEdge, A_dilsize=A_dilsize, A_predown=1,
+                       B_detEdge=B_detEdge, B_dilsize=B_dilsize, B_predown=1, **kwargs)
 
 
 # `match_levels.py`中使用

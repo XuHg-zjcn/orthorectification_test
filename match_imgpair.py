@@ -51,7 +51,7 @@ def parser_options():
         'imgA=',
         'imgB=',
         'predown=',
-        'laplace',
+        'detEdge',
         'dilsize=',
         'maxpix_sift=',
         'maxpixel_sift=',
@@ -82,7 +82,7 @@ def parser_options():
     }
     img_para_default = {
         'predown':0,
-        'laplace':False,
+        'detEdge':False,
         'dilsize':8,
         'maxpixel_sift':1e7,
         'maxpoint_sift':10000,
