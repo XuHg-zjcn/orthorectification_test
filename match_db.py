@@ -82,7 +82,10 @@ def match_img(pathA, pathB, iidA, iidB, estT_B_to_A):
         maxpoints1=args.maxpoint_sift,
         maxpoints2=args.maxpoint_sift,
         threshold_m1m2_ratio=args.threshold_m1m2_ratio)
-    pt, n_match = im.match()
+    if args.match_iter:
+        pt, n_match, it = im.match_iter()
+    else:
+        pt, n_match = im.match()
     return im
 
 
@@ -167,6 +170,8 @@ def update_worst_match(db, maxpoints):
                 n_points = im.n_match
                 db.commit()
                 updated = True
+                if not args.try_more_init:
+                    break
         if updated:
             n_update += 1
     print('===================')
@@ -182,6 +187,8 @@ if __name__ == '__main__':
     parser.add_argument('-r', '--recursive', action='store_true')
     parser.add_argument('--intersect_pyproj', action='store_true')
     parser.add_argument('--filter_iid_in_pair', default=None, type=str)
+    parser.add_argument('--match_iter', action='store_true')            # 使用迭代区域匹配
+    parser.add_argument('--try_more_init', action='store_true')         # 尝试多个初始值
     # preprocess setting
     parser.add_argument('--extCoef', default=0.1, type=float)
     parser.add_argument('--extMin', default=10, type=int)
