@@ -54,6 +54,7 @@ class Database:
             'width INT,'
             'height INT,'
             'geom POLYGON,'
+            'transform_geo BLOB,'
             'FOREIGN KEY (frameid) REFERENCES frames(id))'
         )
         cursor.execute(  # 图像匹配
@@ -82,10 +83,14 @@ class Database:
         )
 
     def insert_frame(self, name, platform, arquire_date, geom):
+        if geom is not None:
+            geom_wkt = geom.wkt
+        else:
+            geom_wkt = None
         cursor = self.conn.cursor()
         cursor.execute(
             'INSERT INTO frames (name, platform, arquire_date, geom) VALUES(?,?,?,GeomFromText(?, 4326));',
-            (name, platform, arquire_date, geom)
+            (name, platform, arquire_date, geom_wkt)
         )
         cursor.execute('SELECT last_insert_rowid() FROM frames LIMIT 1;')
         return next(cursor)[0]
@@ -104,12 +109,59 @@ class Database:
             return geom[0]
         return None
 
-    def insert_img(self, frameid, paths, size, width, height):
+    def get_frame_allfield(self, fid):
+        cursor = self.conn.cursor()
+        cursor.execute('SELECT name, platform, arquire_date, ST_AsText(geom) FROM frames WHERE id=?;', (fid,))
+        lst = cursor.fetchall()
+        if len(lst) == 0:
+            return None
+        name, platform, arquire_date, geom_wkt = lst[0]
+        geom = shapely.from_wkt(geom_wkt)
+        return {
+            'name':name,
+            'platform':platform,
+            'arquire_date':arquire_date,
+            'geom':geom
+        }
+
+    def update_frame(self, fid, d):
+        cursor = self.conn.cursor()
+        params = []
+        setitem = []
+        if 'name' in d:
+            setitem.append('name=?')
+            params.append(d['name'])
+        if 'platform' in d:
+            setitem.append('platform=?')
+            params.append(d['platform'])
+        if 'arquire_date' in d:
+            setitem.append('arquire_date=?')
+            params.append(d['arquire_date'])
+        if 'geom' in d:
+            setitem.append('geom=ST_GeomFromText(?,0)')
+            params.append(d['geom'].wkt)
+        if len(setitem) == 0:
+            return
+        sql = 'UPDATE frames SET ' + ','.join(setitem) + ' WHERE id = ?;'
+        params.append(fid)
+        cursor.execute(sql, params)
+
+    def insert_img(self, frameid, paths, size, width, height, geom=None, transform_geo=None):
         paths_str = ''.join(map(lambda x:x+'\n', paths))
+        if geom is not None:
+            geom_wkt = geom.wkt
+        else:
+            geom_wkt = None
+        if transform_geo is not None:
+            transform_geo_blob = transform_geo.astype(np.float64).tybytes()
+        else:
+            transform_geo_blob = None
         cursor = self.conn.cursor()
         cursor.execute(
-            'INSERT INTO images (frameid, paths, size, width, height) VALUES(?,?,?,?,?);',
-            (frameid, paths_str, size, width, height)
+            'INSERT INTO images '
+            '(frameid, paths, size, width, height, geom, transform_geo) '
+            'VALUES(?,?,?,?,?,ST_GeomFromText(?, 0),?);',
+            (frameid, paths_str, size, width, height, geom_wkt, transform_geo_blob)
         )
         cursor.execute('SELECT last_insert_rowid() FROM frames LIMIT 1;')
         return next(cursor)[0]
@@ -157,6 +209,49 @@ class Database:
         for path in paths:
             if os.path.isfile(path) and os.stat(path).st_size == size:
                 return path
+
+    def get_img_allfield(self, iid):
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT frameid, paths, size, width, height, ST_AsText(geom),transform_geo FROM images WHERE id=?", (iid,))
+        lst = cursor.fetchall()
+        if len(lst) == 0:
+            return None
+        fid, paths, size, width, height, geom_wkt, transform_geo_blob = lst[0]
+        paths = paths.rstrip('\n').split('\n')
+        if geom_wkt is not None:
+            geom = shapely.from_wkt(geom_wkt)
+        else:
+            geom = None
+        if transform_geo_blob is not None:
+            transform_geo = np.frombuffer(transform_geo_blob, dtype=np.float64).reshape((3, 3))
+            transform_geo = PerspectiveTransform(transform_geo)
+        else:
+            transform_geo = None
+        return {
+            'frameid':fid,
+            'paths':paths,
+            'size':size,
+            'width':width,
+            'height':height,
+            'geom':geom,
+            'transform_geo':transform_geo
+        }
+
+    def update_image(self, iid, d):
+        cursor = self.conn.cursor()
+        params = []
+        setitem = []
+        if 'transform_geo' in d:
+            setitem.append('transform_geo=?')
+            params.append(d['transform_geo'])
+        if 'geom' in d:
+            setitem.append('geom=ST_GeomFromText(?,0)')
+            params.append(d['geom'].wkt)
+        if len(params) == 0:
+            return
+        sql = 'UPDATE images SET ' + ','.join(setitem) + ' WHERE id = ?;'
+        params.append(iid)
+        cursor.execute(sql, params)
 
     def insert_match(self, iid1, iid2, transform, area_b_in_a, n_points):
         assert transform.shape == (3,3)

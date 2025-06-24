@@ -17,13 +17,35 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #############################################################################
 import sys
+import os
+import re
 import xml.etree.ElementTree as ET
 import numpy as np
+import shapely
+import common
+from datetime import datetime
+
 
 class SPOTMetadata:
+    pattern = r'\d{3}-\d{3}_S\d_\d{3}-\d{3}-\d_\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2}_\w+-\d_\w_\w{2}_\w{2}'
     def __init__(self, path):
         self.path = path
         self.tree = ET.parse(path)
+
+    @classmethod
+    def open_by_other_path(cls, path):
+        basename_upper = os.path.basename(path)
+        if basename_upper == 'METADATA.DIM':
+            pass
+        elif basename_upper[-4:] == '.TIF':
+            path = os.path.join(os.path.dirname(path), 'METADATA.DIM')
+        elif basename_upper == 'SCENE01':
+            path = os.path.join(path, 'METADATA.DIM')
+        elif re.match(basename_upper, cls.pattern) is not None:
+            path = os.path.join(path, 'SCENE01/METADATA.DIM')
+        else:
+            return None
+        return cls(path)
 
     # ref: *The SPOT Scene Standard Digital Product Format* p.57
     # on https://regards.cnes.fr/user/swh/modules/54  Identifier:S4-ST-73-01-SI
@@ -69,6 +91,30 @@ class SPOTMetadata:
                 cell_lst.append((G, DC))
             band_lst.append(cell_lst)
         return band_lst
+
+    def get_tf_to_geo(self):
+        root = self.tree.getroot()
+        v_lst = list(root.find('Dataset_Frame'))
+        corn_pix = []
+        corn_geo = []
+        for v in v_lst:
+            if v.tag != 'Vertex':
+                continue
+            lon = float(v.find('FRAME_LON').text)
+            lat = float(v.find('FRAME_LAT').text)
+            row = int(v.find('FRAME_ROW').text)-1  # SPOT元数据中以1为起点
+            col = int(v.find('FRAME_COL').text)-1
+            corn_pix.append((col, row))
+            corn_geo.append((lon, lat))
+        poly_geo = shapely.polygons(corn_geo)
+        pt = common.getPerspective_4coords(corn_pix, corn_geo)
+        return poly_geo, pt
+
+    def get_arquire_date(self):
+        root = self.tree.getroot()
+        dataset_name = root.find('Dataset_Id/DATASET_NAME').text
+        m = re.match(r'SCENE \d \d{3}-\d{3}[//]?\d? (\d{2}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}) \d \w', dataset_name)
+        return datetime.strptime(m.group(1), '%y/%m/%d %H:%M:%S')
 
 
 # ref: https://gdal.org/en/stable/drivers/raster/gtiff.html#georeferencing

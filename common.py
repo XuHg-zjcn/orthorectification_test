@@ -42,6 +42,16 @@ def findPerspective(x1, y1, x2, y2, coord_lt, coord_rt, coord_rb, coord_lb):
     else:
         return transform.PerspectiveTransform(H)
 
+def getPerspective_4coords(src, dst):
+    src = np.array(src, dtype=np.float32)
+    dst = np.array(dst, dtype=np.float32)
+    try:
+        H = cv2.getPerspectiveTransform(src, dst)
+    except:
+        return None
+    else:
+        return transform.PerspectiveTransform(H)
+
 def try_func(f, *args, **kwargs):
     try:
         retval = f(*args, **kwargs)

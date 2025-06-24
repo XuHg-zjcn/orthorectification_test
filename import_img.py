@@ -23,7 +23,7 @@ import shapely
 from osgeo import gdal
 import database
 import khseries_corners
-import metadata
+from spot_metadata import SPOTMetadata
 
 pattern_kh = r'^D\d?[A-Z]{0,2}\d{4}-\d+[A-Z]+\d+'
 pattern_spot = r'\d{3}-\d{3}_S\d_\d{3}-\d{3}-\d_\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2}_\w+-\d_\w_\w{2}_\w{2}'
@@ -58,24 +58,35 @@ def process_kh_fid(db, path, rpath, name):
 # TODO: 应该设置Frame类，每种传感器继承子类
 def process_spot_fid(db, path, rpath, name):
     Sx = name[name.find('S')+1]
-    print(f'is SPOT{Sx} imagery')
+    platform = f'SPOT{Sx}'
+    print(f'is {platform} imagery')
+    metadata = SPOTMetadata.open_by_other_path(rpath)
+    arquire_date = metadata.get_arquire_date()
+    geom, _ = metadata.get_tf_to_geo()
     fid = db.get_frame_by_name(name)
-    if fid is not None:
+    old_data = db.get_frame_allfield(fid)
+    if fid is not None and old_data is not None:
         print(f'frame found in db, id={fid}')
+        new_data = {'names':name,
+                    'platform':platform,
+                    'arquire_date':arquire_date,
+                    'geom':geom}
+        d = {}
+        for k, v in new_data.items():
+            if v is None:
+                continue
+            if k not in old_data or old_data[k] is None:
+                d[k] = v
+        db.update_frame(fid, d)
     else:
-        arquire_date = None
-        retval = metadata.read_metadata(rpath)
-        if retval is None:
-            geom = None
-        else:
-            gcps, H = retval
-            geom = shapely.Polygon(tuple(map(lambda x:(x[2],x[3]), gcps))).wkt
-        fid = db.insert_frame(name, None, arquire_date, geom)
-    return fid
+        fid = db.insert_frame(name, platform, arquire_date, geom)
+    return fid, metadata
 
 def import_img(db, path):
     rpath = os.path.realpath(path)
     filename = os.path.basename(rpath)
+    geom = None
+    transform_geo = None
     fid = None
     m = re.match(pattern_kh, filename)
     if m is not None:
@@ -84,7 +95,8 @@ def import_img(db, path):
     m = re.search(pattern_spot, rpath)
     if m is not None:
         name = m.group(0)
-        fid = process_spot_fid(db, path, rpath, name)
+        fid, metadata = process_spot_fid(db, path, rpath, name)
+        geom, transform_geo = metadata.get_tf_to_geo()
     if fid is None:
         return None
     size = os.stat(rpath).st_size
@@ -94,6 +106,16 @@ def import_img(db, path):
         iid = db.insert_img(fid, [rpath], size, ds.RasterXSize, ds.RasterYSize)
         print(f'image insert to db, id={iid}')
     else:
+        old_data = db.get_img_allfield(iid)
+        new_data = {'transform_geo':transform_geo,
+                    'geom':geom}
+        d = {}
+        for k, v in new_data.items():
+            if v is None:
+                continue
+            if k not in old_data or old_data[k] is None:
+                d[k] = v
+        db.update_image(iid, d)
         print(f'image already in db, id={iid}')
     print()
     ds.Close()
