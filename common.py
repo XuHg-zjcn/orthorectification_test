@@ -29,6 +29,28 @@ def proj(H, x):
     x /= x[:,2].reshape((-1,1))
     return x[:,:2]
 
+def _weight_median(values, weights):
+    half_weight = np.sum(weights) / 2
+    index_sortvalue = np.argsort(values)  # value排序后，在原来的位置
+    weight_on_sortvalue = weights[index_sortvalue]  # 按照value排序对应的weight
+    csum_weight = np.cumsum(weight_on_sortvalue)
+    index_half_weight = np.searchsorted(csum_weight, half_weight)
+    return values[index_half_weight]
+
+def weight_median(values, weights, axis=-1):
+    values = np.array(values)
+    weights = np.array(weights)
+    assert weights.ndim == 1
+    assert values.shape[axis] == weights.shape[0]
+    N = weights.shape[0]
+    values_groups = values.swapaxes(axis, -1).reshape(-1, N)  # 分成多组数据，每组数据有N个
+    result = np.zeros(values_groups.shape[0])
+    for i, group in enumerate(values_groups):  # 独立处理每组
+        result[i] = _weight_median(group, weights)
+    new_shape = list(values.shape)
+    new_shape.pop(axis)
+    return result.reshape(new_shape)
+
 def shapely_perspective(x, H):
     return shapely.transform(x, functools.partial(proj, H))
 

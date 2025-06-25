@@ -364,10 +364,11 @@ class Database:
         )
         return list(map(lambda x:x[0],cursor))
 
-    def get_matchways_more(self, start, ends, maxlength=3):
+    def get_matchways_more(self, start, ends, maxlength=3, endtype=None):
         ResultItem = namedtuple('ResultItem', ['path', 'weight'])
         # 此处SQL代码由DeepSeek给出并做修改
         cursor = self.conn.cursor()
+        params = [start, maxlength]
         sql = '''
         WITH RECURSIVE cte AS (
         SELECT b_imgid AS current_node,
@@ -388,11 +389,15 @@ class Database:
         )
         SELECT path, 1.0/total_weight
         FROM cte
-        WHERE ? LIKE '%,' || current_node || ',%' -- 多个终点
-        ORDER BY 1.0/total_weight DESC;
         '''
-        ends_str = ','+(','.join(map(lambda x:str(x), ends)))+','
-        cursor.execute(sql, (start, maxlength, ends_str))
+        if endtype is None:
+            sql += "WHERE ? LIKE '%,' || current_node || ',%' -- 多个终点\n"
+            ends_str = ','+(','.join(map(lambda x:str(x), ends)))+','
+            params.append(ends_str)
+        elif endtype == 'tfgeo':
+            sql += 'WHERE current_node IN (SELECT id FROM images WHERE transform_geo IS NOT NULL)\n'
+        sql += 'ORDER BY 1.0/total_weight DESC;\n'
+        cursor.execute(sql, params)
         paths_lst = []
         for path_str, weight in cursor:
             path_intlst = list(map(lambda x:int(x), path_str.split(',')[1:-1]))
@@ -408,23 +413,38 @@ class Database:
         for start, ends in d.items():
             paths_lst = self.get_matchways_more(start, ends, maxlength)
             for path, weight in paths_lst:
-                node_pre = None
-                t = PerspectiveTransform.keep()
-                for node in path:
-                    if node_pre is None:
-                        node_pre = node
-                        continue
-                    t_ = self.get_match_tranform_bidire(node, node_pre)
-                    t = t_.fog(t)
-                    node_pre = node
+                t = self.get_tf_on_path(path)
                 pair = (path[0], path[-1])
                 result[pair].append(ResultItem(path, weight, t))
         return result
+
+    def get_tf_on_path(self, path):
+        node_pre = None
+        t = PerspectiveTransform.keep()
+        for node in path:
+            if node_pre is None:
+                node_pre = node
+                continue
+            t_ = self.get_match_tranform_bidire(node, node_pre)
+            t = t_.fog(t)
+            node_pre = node
+        return t
 
     def get_matchways_more_tf_singlepair(self, start, end, maxlength=3):
         pair = (start, end)
         result = self.get_matchways_more_tf([pair], maxlength)
         return result[pair]
+
+    def get_matchways_more_tfgeo(self, start, maxlength=2):
+        paths_lst = self.get_matchways_more(start, None, maxlength, endtype='tfgeo')
+        result = []
+        for path, weight in paths_lst:
+            last_node = path[-1]
+            t = self.get_tf_on_path(path)
+            transform_geo = self.get_img_allfield(last_node)['transform_geo']
+            tfgeo = transform_geo.fog(t)
+            result.append((path, weight, tfgeo))
+        return result
 
     def get_worst_match(self, maxpoints):
         cursor = self.conn.cursor()
