@@ -19,7 +19,15 @@ USGS EarthExplorer下载下来的解密影像的没有进行坐标变换（但�
 命令`./import_img.py <files> <files>...`会将图像的元数据记录到数据库（位于`data/imagery.db`），用于后续处理
 
 ## 自动匹配影像
+命令`./match_part.py <files> <files>`匹配分片扫描影像，文件必须按照从左到右的顺序（上一张的右侧和下一张的左侧有重叠区域）
+
 命令`./match_levels.py <file>`将低分辨率影像与高分辨率影像匹配，命令行参数是低分辨率影像的路径，会从数据库按元数据中的覆盖范围的重叠高分辨率影像进行匹配
+
+命令`./match_db.py`使用数据库的已有数据来进行新匹配
+- `--intersect_matchs_in_db`用于匹配数据库内投影到同一个影像有相交的区域的像对，但没有匹配
+- `--update_worst_match`用于更新较差的匹配
+
+更多参数可以通过`--help`选项查看
 
 ## 手动匹配影像
 `match_imgpair.py`是一个SIFT+RANSAC算法的立体图像对齐程序，支持使用裁剪黑边、降低分辨率、拉普拉斯变换、膨胀进行预处理。
@@ -32,12 +40,20 @@ USGS EarthExplorer下载下来的解密影像的没有进行坐标变换（但�
 - `./match_imgpair.py -a data/003-008_S5_295-290-0_2011-11-24-02-41-14_HRG-2_A_DT_JK/SCENE01/IMAGERY.TIF -b data/003-004_S5_295-290-0_2012-01-04-02-52-09_HRG-2_A_DT_NO/SCENE01/IMAGERY.TIF -m data/match_spot_2011_2012.jpg`能匹配714个点
 - `./match_imgpair.py  --detEdge --dilsize 8 --maxpixel_sift=1e6 --threshold_m1m2_ratio 0.87 -a data/003-008_S5_295-290-0_2011-11-24-02-41-14_HRG-2_A_DT_JK/SCENE01/IMAGERY.TIF -b data/004-010_S5_295-290-0_2014-02-01-02-25-09_HRG-2_B_DT_NO/SCENE01/IMAGERY.TIF -m data/match_spot_2011_2014.jpg`能匹配83个点
 
+## 生成RPC文件
+命令`./gen_rpc.py <file>`能生成RPC文件，RPC文件名以 原前缀名+"_RPC.TXT" 存放在相同文件夹下
+
+## 其他程序
+- `build_overview.sh`建立金字塔预览图
+- `draw_graph.py`绘制各图像之间的匹配关系图
+- `spot123_filter.py`过滤SPOT 1-3影像的条纹噪声
+
 ## 大致处理流程
-1. 根据元数据找出相交的影像
-2. 初步匹配影像，找出投影矩阵
-3. 进一步匹配影像，考虑视差分布
-4. 找出对应的GCP点
-5. 生成RPC系数文件
+1. 根据元数据找出相交的影像（部分完成，目前只支持KH索引相机）
+2. 初步匹配影像，找出投影矩阵（已完成，需改进：将SIFT向量缓存和使用多线程）
+3. 进一步匹配影像，考虑视差分布（未完成）
+4. 找出对应的GCP点（未完成）
+5. 生成RPC系数文件（目前误差很大，只依靠投影矩阵）
 6. 运行`gdalwarp`
 
 ## 数据来源
